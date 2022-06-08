@@ -23,7 +23,7 @@ man = MyManager()
 
 if __name__ == '__main__':
     # functions.plot_default()
-    n = 100
+    n = 400
     r_max = 1
     r = np.linspace(0.01, r_max, n)
     theta = np.linspace(0, 2*np.pi, n)
@@ -55,8 +55,10 @@ if __name__ == '__main__':
 
     rel_error = np.linalg.norm(res1 - res) / np.linalg.norm(res1)
     print(f"relative error = {rel_error}")
-    functions.plot_E(res, r, theta, r_max)
-    functions.plot_E(res1, r, theta, r_max)
+    diff = res - res1
+    # functions.plot_E(res, r, theta, r_max)
+    # functions.plot_E(res1, r, theta, r_max)
+    functions.plot_E(diff, r, theta, r_max)
 
 
 
