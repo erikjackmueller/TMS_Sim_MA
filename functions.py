@@ -2,7 +2,7 @@ import numpy as np
 from scipy.special import legendre
 from itertools import product
 from functools import partial
-from mpl_toolkits import mplot3d
+# from mpl_toolkits import mplot3d
 from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
 import math
@@ -398,14 +398,52 @@ def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array
     B = np.zeros(M)
     eps0 = 8.854187812813e-12
     for i in range(M):
+        r_norm_i = rs[i] / vnorm(rs[i])
         for j in range(M):
-            r_norm_j = rs[j, :]/vnorm(rs[j])
-            A1 = 1/(4*np.pi * eps0 * vnorm(rs[i, :] - rs[j, :])**3 + kroen(i, j))*(rs[i, :] - rs[j, :])@r_norm_j
-            A2_real = kroen(i, j)/(2*eps0*areas[i])*(1/2)
-            A2_imag = kroen(i, j)/(2*eps0*areas[i])*(omega * eps0 / sig) * 1j
+            r_norm_j = rs[j, :] / vnorm(rs[j])
+            A1 = 1 / (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) * (
+                        rs[i, :] - rs[j, :]) @ r_norm_j
+            A2_real = - kroen(i, j) / (2 * eps0 * areas[i]) * (1 / 2)
+            A2_imag = - kroen(i, j) / (2 * eps0 * areas[i]) * (omega * eps0 / sig) * 1j
             A[i, j] = A1 + A2_real + A2_imag
-        B[i] = vnorm(1e-7*(np.cross(m, (rs[i] - r0)))/(vnorm(rs[i] - r0)**3))
+        # B[i] = vnorm(1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3))
+        B_v = 1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3)
+        B[i] = np.dot(B_v, r_norm_i)
 
+    Q = np.linalg.solve(A, B)
+    return Q, rs
+
+def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
+    i = idxs
+    r_norm_i = rs[i] / vnorm(rs[i])
+    for j in range(M):
+        r_norm_j = rs[j, :] / vnorm(rs[j])
+        A1 = 1 / (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) * (rs[i, :] - rs[j, :]) @ r_norm_j
+        A2_real = - kroen(i, j) / (2 * eps0 * areas[i]) * (1 / 2)
+        A2_imag = - kroen(i, j) / (2 * eps0 * areas[i]) * (omega * eps0 / sig) * 1j
+        A[i, j] = A1 + A2_real + A2_imag
+    B[i] = vnorm(1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3))
+    # B_v = 1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3)
+    # B[i] = np.dot(B_v, r_norm_i)
+
+
+def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]),
+                    sig=0.33, omega=1):
+    rs = tri_centers
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+
+    manager.start()
+    A = manager.np_zeros([M, M], dtype=np.complex_)
+    B = manager.np_zeros(M)
+    # n_cpu = 5
+    n_cpu = multiprocessing.cpu_count()
+    pool = multiprocessing.Pool(n_cpu)
+    idx_list = list(range(M))
+    workhorse_partial = partial(Q_parallel, A=A, B=B, rs=rs, r0=r0, m=m, areas=areas, eps0=eps0, omega=omega, sig=sig, M=M)
+    idx_list_chunks = compute_chunks(idx_list, n_cpu)
+    pool.map(workhorse_partial, idx_list_chunks)
+    pool.close()
     Q = np.linalg.solve(A, B)
     return Q, rs
 
@@ -474,9 +512,11 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
         grad_phi = np.zeros([3, N], dtype=np.complex_)
         for n in range(N):
             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-        E_complex = grad_phi.sum(axis=1) - (1j * omega * mu0) / (4 * np.pi * vnorm(r_v - r0) ** 3)\
-                    * (np.cross(m, (r_v - r0)))
-        E[i, j] = vnorm(E_complex.imag)
+        E_complex = grad_phi.sum(axis=1) - (1j * omega * mu0) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (
+            np.cross(m, (r_v - r0)))
+        # E[i, j] = vnorm(E_complex.imag)
+        E[i, j, 0, :] = E_complex.real
+        E[i, j, 1, :] = E_complex.imag
 
 def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]),
                            phi=0, omega=1):
@@ -484,9 +524,9 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     mu0 = 4*np.pi*1e-7
     # E_v = np.zeros([3, r_q.shape[0]], dtype=np.complex_)
 
+    # manager.start()
     I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
-    manager.start()
-    E = manager.np_zeros([I, J])
+    E = manager.np_zeros([I, J, 2, 3])
     # n_cpu = 5
     n_cpu = multiprocessing.cpu_count()
 
@@ -506,12 +546,27 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     #         for n in range(N):
     #             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
     #         E_complex = grad_phi.sum(axis=1) - (1j * omega * mu0) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (np.cross(m, (r_v - r0)))
-    #         E[i, j] = vnorm(E_complex.imag)
+    #         # E[i, j] = vnorm(E_complex.imag)
+    #         E[i, j, 0, :] = E_complex.real
+    #         E[i, j, 1, :] = E_complex.imag
+
+
 
     idx_list_chunks = compute_chunks(idx_list, n_cpu)
     pool.map(workhorse_partial, idx_list_chunks)
+    pool.close()
+    res_real = np.zeros([I, J])
+    res_imag = np.zeros([I, J])
+    res_comp = np.zeros([I, J])
 
-    return np.array(E)
+    E_vector_comp = np.array(E)
+    for i in range(I):
+        for j in range(J):
+            res_real[i, j] = vnorm(E[i, j, 0, :])
+            res_imag[i, j] = vnorm(E[i, j, 1, :])
+            res_comp[i, j] = vnorm(E[i, j, 0, :] + 1j*E[i, j, 1, :])
+
+    return np.array(E), res_real, res_imag, res_comp
 
 
 # r = 8
