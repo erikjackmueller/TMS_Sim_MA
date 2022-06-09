@@ -12,8 +12,8 @@ import multiprocessing.managers
 
 # functions.plot_default()
 # path = os.path.realpath(Path("C:/Users/Besitzer/Downloads/Sphere_642"))
-path = "Sphere_624"
-sizes = [624, 1280]
+path = "Sphere_642"
+sizes = [642, 1280]
 
 
 class MyManager(multiprocessing.managers.BaseManager):
@@ -38,14 +38,15 @@ if __name__ == '__main__':
     print(f"{end - start:.2f}s receprocity")
 
     start = time.time()
+    # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
     tc, areas = functions.read_sphere_mesh_from_txt_locations_only(sizes, path)
     # functions.triangulateSphere(20)
     end = time.time()
     print(f"{end - start:.2f}s triangulation")
 
     start = time.time()
-    # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m)
-    Q, rs = functions.SCSM_Q_parallel(man, tc, areas, r0=r0, m=m)
+    Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m)
+    # Q, rs = functions.SCSM_Q_parallel(man, tc, areas, r0=r0, m=m)
     end = time.time()
     print(f"{end - start:.2f}s  Q calculation")
 

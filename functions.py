@@ -25,27 +25,22 @@ def read_sphere_mesh_from_txt(sizes, path):
     trangle_centers = np.zeros([len(connections[0, :]), 3])
     areas = np.zeros(len(connections[0, :]))
 
-
-
     # calculate centerpoints of trinagles from connections and vertexes
     # center is (AB + BC + CA) / 3 starting from A
     # for a flat trangle in space that should be (x1 + x2 + x3)/3, (y1 + y2 + y3)/3, (z1 + z2 + z3)/3
     # for the area the formula is S = 1/2|AB x AC|, x is the crossproduct in this case
-    point1 = np.zeros(3)
-    point2 = np.zeros(3)
-    point3 = np.zeros(3)
 
-    # plot_mesh(locations, connections, 4, 14)
+    # plot_mesh(locations, connections, 0, 500)
     # ax1 = plt.axes(projection='3d')
-    # plot_triangle(ax1, locations, connections, 4)
+    # plot_triangle(ax1, locations, connections, 4, centers=trangle_centers)
     # plot_triangle(ax1, locations, connections, 2) # they're only almost the same
     # plot_triangle(ax1, locations, connections, 12)
 
 
     for i in range(len(connections[0, :])):
-        p1 = locations[:, int(connections[0, i]) - 1]
-        p2 = locations[:, int(connections[1, i]) - 1]
-        p3 = locations[:, int(connections[2, i]) - 1]
+        p1 = locations[:, int(connections[0, i])]
+        p2 = locations[:, int(connections[1, i])]
+        p3 = locations[:, int(connections[2, i])]
         p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
         p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
         p_c_3 = (p1[2] + p2[2] + p3[2]) / 3
@@ -98,7 +93,7 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path):
         line1_3 = p3 - p1
         areas[i] = 0.5*vnorm(np.cross(line1_2, line1_3))
 
-    # plot_mesh(locations, connections, 0, 10, centers=triangle_centers)
+    # plot_mesh(locations, connections, 0, 1200, centers=triangle_centers)
     # ax1 = plt.axes(projection='3d')
     # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
 
@@ -403,8 +398,8 @@ def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array
             r_norm_j = rs[j, :] / vnorm(rs[j])
             A1 = 1 / (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) * (
                         rs[i, :] - rs[j, :]) @ r_norm_j
-            A2_real = - kroen(i, j) / (2 * eps0 * areas[i]) * (1 / 2)
-            A2_imag = - kroen(i, j) / (2 * eps0 * areas[i]) * (omega * eps0 / sig) * 1j
+            A2_real = - kroen(i, j) / (eps0 * areas[i]) * (1 / 2)
+            A2_imag = - kroen(i, j) / (eps0 * areas[i]) * (omega * eps0 / sig) * 1j
             A[i, j] = A1 + A2_real + A2_imag
         # B[i] = vnorm(1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3))
         B_v = 1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3)
@@ -418,13 +413,13 @@ def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
     r_norm_i = rs[i] / vnorm(rs[i])
     for j in range(M):
         r_norm_j = rs[j, :] / vnorm(rs[j])
-        A1 = 1 / (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) * (rs[i, :] - rs[j, :]) @ r_norm_j
-        A2_real = - kroen(i, j) / (2 * eps0 * areas[i]) * (1 / 2)
-        A2_imag = - kroen(i, j) / (2 * eps0 * areas[i]) * (omega * eps0 / sig) * 1j
+        A1 = 1 / (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) * (rs[i, :] - rs[j, :]) @ r_norm_i
+        A2_real = - kroen(i, j) / (eps0 * areas[i]) * (1 / 2)
+        A2_imag = - kroen(i, j) / (eps0 * areas[i]) * (omega * eps0 / sig) * 1j
         A[i, j] = A1 + A2_real + A2_imag
-    B[i] = vnorm(1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3))
-    # B_v = 1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3)
-    # B[i] = np.dot(B_v, r_norm_i)
+    # B[i] = vnorm(1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3))
+    B_v = 1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3)
+    B[i] = np.dot(B_v, r_norm_i)
 
 
 def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]),
@@ -524,7 +519,7 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     mu0 = 4*np.pi*1e-7
     # E_v = np.zeros([3, r_q.shape[0]], dtype=np.complex_)
 
-    # manager.start()
+    manager.start()
     I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
     E = manager.np_zeros([I, J, 2, 3])
     # n_cpu = 5
