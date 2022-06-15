@@ -395,31 +395,28 @@ def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array
     for i in range(M):
         r_norm_i = rs[i] / vnorm(rs[i])
         for j in range(M):
-            r_norm_j = rs[j, :] / vnorm(rs[j])
-            A1 = 1 / (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) * (
-                        rs[i, :] - rs[j, :]) @ r_norm_j
-            A2_real = - kroen(i, j) / (eps0 * areas[i]) * (1 / 2)
-            A2_imag = - kroen(i, j) / (eps0 * areas[i]) * (omega * eps0 / sig) * 1j
-            A[i, j] = A1 + A2_real + A2_imag
-        # B[i] = vnorm(1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3))
-        B_v = 1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3)
-        B[i] = np.dot(B_v, r_norm_i)
+
+
+            A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
+                      (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :])**3 + kroen(i, j))\
+                      - kroen(i, j)/areas[i]*(1/(2*eps0) + 1j * omega / sig)
+        v_b = np.cross(m, (rs[i] - r0))
+        n_b = v_b / vnorm(v_b)
+        B[i] = 1e-7 * np.dot(v_b, r_norm_i) / (vnorm(rs[i] - r0) ** 3)
+        # B[i] = 0
 
     Q = np.linalg.solve(A, B)
     return Q, rs
 
 def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
-    i = idxs
-    r_norm_i = rs[i] / vnorm(rs[i])
-    for j in range(M):
-        r_norm_j = rs[j, :] / vnorm(rs[j])
-        A1 = 1 / (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) * (rs[i, :] - rs[j, :]) @ r_norm_i
-        A2_real = - kroen(i, j) / (eps0 * areas[i]) * (1 / 2)
-        A2_imag = - kroen(i, j) / (eps0 * areas[i]) * (omega * eps0 / sig) * 1j
-        A[i, j] = A1 + A2_real + A2_imag
-    # B[i] = vnorm(1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3))
-    B_v = 1e-7 * (np.cross(m, (rs[i] - r0))) / (vnorm(rs[i] - r0) ** 3)
-    B[i] = np.dot(B_v, r_norm_i)
+
+    for i in idxs:
+        r_norm_i = rs[i] / vnorm(rs[i])
+        for j in range(M):
+            A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
+                      (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) \
+                      - kroen(i, j) / areas[i] * (1 / (2 * eps0) + 1j * omega / sig)
+            B[i] = 1e-7 * np.dot((np.cross(m, (rs[i] - r0))), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
 
 
 def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]),
@@ -507,11 +504,10 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
         grad_phi = np.zeros([3, N], dtype=np.complex_)
         for n in range(N):
             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-        E_complex = grad_phi.sum(axis=1) - (1j * omega * mu0) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (
-            np.cross(m, (r_v - r0)))
+        E_complex = 5e8*grad_phi.sum(axis=1) - (1j * omega * 4*np.pi*1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (np.cross(m, (r_v - r0)))
         # E[i, j] = vnorm(E_complex.imag)
-        E[i, j, 0, :] = E_complex.real
-        E[i, j, 1, :] = E_complex.imag
+        # E[i, j, 0, :] = E_complex.real
+        E[i, j] = vnorm(E_complex.imag)
 
 def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]),
                            phi=0, omega=1):
@@ -521,7 +517,7 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
 
     manager.start()
     I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
-    E = manager.np_zeros([I, J, 2, 3])
+    E = manager.np_zeros([I, J])
     # n_cpu = 5
     n_cpu = multiprocessing.cpu_count()
 
@@ -550,18 +546,8 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     idx_list_chunks = compute_chunks(idx_list, n_cpu)
     pool.map(workhorse_partial, idx_list_chunks)
     pool.close()
-    res_real = np.zeros([I, J])
-    res_imag = np.zeros([I, J])
-    res_comp = np.zeros([I, J])
 
-    E_vector_comp = np.array(E)
-    for i in range(I):
-        for j in range(J):
-            res_real[i, j] = vnorm(E[i, j, 0, :])
-            res_imag[i, j] = vnorm(E[i, j, 1, :])
-            res_comp[i, j] = vnorm(E[i, j, 0, :] + 1j*E[i, j, 1, :])
-
-    return np.array(E), res_real, res_imag, res_comp
+    return np.array(E)
 
 
 # r = 8
