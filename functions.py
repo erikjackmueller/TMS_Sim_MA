@@ -322,6 +322,33 @@ def plot_E(res, r, theta, r_max):
     # ax.set_title(f"|H| for r0 = {str(r0)}^T")
 
     plt.show()
+
+def plot_E_diff(res1, res2, r, theta, r_max):
+
+    diff = np.abs(res2 - res1)
+    fig, ax = plt.subplots(1, 3, subplot_kw={'projection': 'polar'}, figsize=(12,4))
+    ax1, ax2, ax3 = ax[0], ax[1], ax[2]
+    f_max = max(res1.max(), res2.max())
+    f_min = min(res1.min(), res2.min())
+    im = ax1.pcolormesh(theta, r, res1, cmap='plasma', vmin=f_min, vmax=f_max)
+    ax1.set_yticklabels([])
+    ax1.set_rmax(r_max)
+    ax1.grid(True)
+    im = ax2.pcolormesh(theta, r, res2, cmap='plasma', vmin=f_min, vmax=f_max)
+    ax2.set_yticklabels([])
+    ax2.set_rmax(r_max)
+    ax2.grid(True)
+    im = ax3.pcolormesh(theta, r, diff, cmap='plasma', vmin=f_min, vmax=f_max)
+    ax3.set_yticklabels([])
+    ax3.set_rmax(r_max)
+    ax3.grid(True)
+    fig.colorbar(im)
+    ax1.set_title("res1")
+    ax2.set_title("res2")
+    ax3.set_title("difference")
+    plt.subplots_adjust(wspace=0.6, hspace=0.4)
+
+    plt.show()
 # plot_default()
 def sphere_to_carthesian(r, theta, phi):
     return r*np.sin(theta)*np.cos(phi), r*np.sin(theta)*np.sin(phi), r*np.cos(theta)
@@ -390,19 +417,19 @@ def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array
     rs = tri_centers
     M = rs.shape[0]
     A = np.zeros([M, M], dtype=np.complex_)
-    B = np.zeros(M)
+    B = np.zeros(M, dtype=np.complex_)
     eps0 = 8.854187812813e-12
     for i in range(M):
         r_norm_i = rs[i] / vnorm(rs[i])
         for j in range(M):
-
-
+            r_norm_j = rs[j] / vnorm(rs[j])
             A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
                       (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :])**3 + kroen(i, j))\
-                      - kroen(i, j)/areas[i]*(1/(2*eps0) + 1j * omega / sig)
+                      - kroen(i, j)/(eps0 * areas[i]) * ((1/2) + ((1j * omega * eps0)/sig))
+
         v_b = np.cross(m, (rs[i] - r0))
         n_b = v_b / vnorm(v_b)
-        B[i] = 1e-7 * np.dot(v_b, r_norm_i) / (vnorm(rs[i] - r0) ** 3)
+        B[i] = 1j * omega * 1e-7 * np.dot(v_b, r_norm_i) / (vnorm(rs[i] - r0) ** 3)
         # B[i] = 0
 
     Q = np.linalg.solve(A, B)
@@ -410,13 +437,13 @@ def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array
 
 def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
 
-    for i in idxs:
+    i = idxs
+    for j in range(M):
         r_norm_i = rs[i] / vnorm(rs[i])
-        for j in range(M):
-            A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
-                      (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) \
-                      - kroen(i, j) / areas[i] * (1 / (2 * eps0) + 1j * omega / sig)
-            B[i] = 1e-7 * np.dot((np.cross(m, (rs[i] - r0))), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
+        A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
+                  (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) \
+                  - kroen(i, j) / areas[i] * (1 / (2 * eps0) + 1j * omega / sig)
+        B[i] = 1e-7 * np.dot((np.cross(m, (rs[i] - r0))), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
 
 
 def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]),
@@ -433,8 +460,8 @@ def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.
     pool = multiprocessing.Pool(n_cpu)
     idx_list = list(range(M))
     workhorse_partial = partial(Q_parallel, A=A, B=B, rs=rs, r0=r0, m=m, areas=areas, eps0=eps0, omega=omega, sig=sig, M=M)
-    idx_list_chunks = compute_chunks(idx_list, n_cpu)
-    pool.map(workhorse_partial, idx_list_chunks)
+    # idx_list_chunks = compute_chunks(idx_list, n_cpu)
+    pool.map(workhorse_partial, idx_list)
     pool.close()
     Q = np.linalg.solve(A, B)
     return Q, rs
@@ -504,7 +531,7 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
         grad_phi = np.zeros([3, N], dtype=np.complex_)
         for n in range(N):
             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-        E_complex = 5e8*grad_phi.sum(axis=1) - (1j * omega * 4*np.pi*1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (np.cross(m, (r_v - r0)))
+        E_complex = 1.15*grad_phi.sum(axis=1) - (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (vnorm(r_v - r0) ** 3)
         # E[i, j] = vnorm(E_complex.imag)
         # E[i, j, 0, :] = E_complex.real
         E[i, j] = vnorm(E_complex.imag)
@@ -536,10 +563,10 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     #         grad_phi = np.zeros([3, N], dtype=np.complex_)
     #         for n in range(N):
     #             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-    #         E_complex = grad_phi.sum(axis=1) - (1j * omega * mu0) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (np.cross(m, (r_v - r0)))
+    #         E_complex = grad_phi.sum(axis=1) - (1j * omega * 4*np.pi*1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (np.cross(m, (r_v - r0)))
     #         # E[i, j] = vnorm(E_complex.imag)
-    #         E[i, j, 0, :] = E_complex.real
-    #         E[i, j, 1, :] = E_complex.imag
+    #         # E[i, j, 0, :] = E_complex.real
+    #         E[i, j] = vnorm(E_complex.imag)
 
 
 

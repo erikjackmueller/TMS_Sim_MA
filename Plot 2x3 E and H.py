@@ -4,7 +4,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
-ax = plt.subplots(2, 3, projection='polar')
+fig, ax = plt.subplots(2, 3, subplot_kw={'projection': 'polar'})
 
 loc_list_1 = [0, 0, 0, 1, 1, 1]
 loc_list_2 = [0, 1, 2, 0, 1, 2]
@@ -33,3 +33,5 @@ for i in range(2):
         ax_ij.plot(theta, line2, c='k')
         ax_ij.plot(theta, line3, c='k')
         ax_ij.grid(True)
+
+plt.show()

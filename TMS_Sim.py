@@ -28,9 +28,9 @@ if __name__ == '__main__':
     r = np.linspace(0.01, r_max, n)
     theta = np.linspace(0, 2*np.pi, n)
     phi = (1/2)*np.pi
-    r0 = np.array([0, 5, 0])
+    r0 = 10*np.array([0, 0.1, 1])
     # r0 = np.array([0.7071067811865476, 0.7071067811865476, 0])
-    m = np.array([1, -1, 0])
+    m = np.array([0, 0.1, 1])
 
     start = time.time()
     time_0 = start
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     print(f"{end - start:.2f}s triangulation")
 
     start = time.time()
-    Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
+    Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1e-9)
     # Q, rs = functions.SCSM_Q_parallel(man, tc, areas, r0=r0, m=m)
     end = time.time()
     print(f"{end - start:.2f}s  Q calculation")
@@ -67,11 +67,12 @@ if __name__ == '__main__':
 
     print("relative error:")
     print(rerror_imag)
-
-    functions.plot_E(res1, r, theta, r_max)
+    # print(res1[0, 0])
+    # functions.plot_E(res1, r, theta, r_max)
     # functions.plot_E(res2, r, theta, r_max)
-    functions.plot_E(res2, r, theta, r_max)
-    functions.plot_E(diff_to_imag, r, theta, r_max)
+    # functions.plot_E(res2, r, theta, r_max)
+    # functions.plot_E(diff_to_imag, r, theta, r_max)
+    functions.plot_E_diff(res1, res2, r, theta, r_max)
     # functions.plot_E(res4, r, theta, r_max)
     # functions.plot_E(res1, r, theta, r_max)
     # functions.plot_E(diff, r, theta, r_max)
