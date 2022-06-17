@@ -323,7 +323,7 @@ def plot_E(res, r, theta, r_max):
 
     plt.show()
 
-def plot_E_diff(res1, res2, r, theta, r_max):
+def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
 
     diff = np.abs(res2 - res1)
     fig, ax = plt.subplots(1, 3, subplot_kw={'projection': 'polar'}, figsize=(12,4))
@@ -347,6 +347,8 @@ def plot_E_diff(res1, res2, r, theta, r_max):
     ax2.set_title("res2")
     ax3.set_title("difference")
     plt.subplots_adjust(wspace=0.6, hspace=0.4)
+    rerror = np.linalg.norm(diff) / np.linalg.norm(res1)
+    fig.suptitle(f"relative error: {rerror}, r0 = {r0}, m = {m}" )
 
     plt.show()
 # plot_default()
@@ -499,26 +501,31 @@ def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.
 #     return E
 
 def SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1):
+
     eps0 = 8.854187812813e-12
-    mu0 = 4*np.pi*1e-7
+    I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
     E = np.zeros([r_sphere.shape[0], theta.shape[0]])
-    E_v = np.zeros([3, r_q.shape[0]], dtype=np.complex_)
     start_time = time.time()
     time_1 = 0
-    for i_theta in range(theta.shape[0]):
-        xs, ys = r_sphere * np.cos(theta[i_theta]), r_sphere * np.sin(theta[i_theta])
-        rs = np.array([xs, ys, np.zeros(xs.shape[0])])  # r is now in carthesian coordinates!
-        for i_r in range(r_sphere.shape[0]):
-            r_v = rs[:, i_r]
-            for n in range(r_q.shape[0]):
-                E_v[:, n] = Q[n]*(r_v - r_q[n])/(4*np.pi*eps0*vnorm(r_v - r_q[n])**3)\
-                            - (1j*omega*mu0)/(4*np.pi * vnorm(r_v - r0)**3) * (np.cross(m, (r_v - r0)))
-            E[i_r, i_theta] = vnorm(E_v.sum(axis=1))
-            # E[i_r, i_theta] = vnorm(E_v.imag.sum(axis=1)) # alternative for inly imaginary part
-        if i_theta == 0:
+    for i in range(I):
+        for j in range(J):
+
+            xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
+            rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+            r_v = rs[:, i]
+            grad_phi = np.zeros([3, N], dtype=np.complex_)
+            for n in range(N):
+                grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            E_complex = grad_phi.sum(axis=1) - (1j * omega * 4 * np.pi * 1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (
+                np.cross(m, (r_v - r0)))
+            # E[i, j] = vnorm(E_complex.imag)
+            # E[i, j, 0, :] = E_complex.real
+            E[i, j] = vnorm(E_complex.imag)
+        if i == 0:
             time_1 = time.time()
-    print(f"angle {i_theta + 1} of {theta.shape[0]} done, "
-          f"{format(((time_1 - start_time)*theta.shape[0] - (time.time() - start_time))/60, '.1f')}")
+        print(f"radius {i + 1} of {theta.shape[0]} done, remaining time: "
+          f"{format(((time_1 - start_time) * theta.shape[0] - (time.time() - start_time)) / 60, '.1f')} minutes")
+
     return E
 
 def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N):
@@ -531,7 +538,7 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
         grad_phi = np.zeros([3, N], dtype=np.complex_)
         for n in range(N):
             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-        E_complex = 1.15*grad_phi.sum(axis=1) - (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (vnorm(r_v - r0) ** 3)
+        E_complex = 1*grad_phi.sum(axis=1) - 1*(1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (vnorm(r_v - r0) ** 3)
         # E[i, j] = vnorm(E_complex.imag)
         # E[i, j, 0, :] = E_complex.real
         E[i, j] = vnorm(E_complex.imag)
