@@ -12,25 +12,26 @@ import multiprocessing.managers
 
 # functions.plot_default()
 # path = os.path.realpath(Path("C:/Users/Besitzer/Downloads/Sphere_642"))
-path = "Sphere_642"
-sizes = [642, 1280]
-
+path = "Sphere_10242"
+sizes = [10242, 1280]
+# path = "Sphere_642"
+# sizes = [642, 1280]
 
 class MyManager(multiprocessing.managers.BaseManager):
     pass
 MyManager.register('np_zeros', np.zeros, multiprocessing.managers.ArrayProxy)
 man = MyManager()
-
 if __name__ == '__main__':
     # functions.plot_default()
-    n = 100
-    r_max = 0.9955
-    r = np.linspace(0.01, r_max, n)
-    theta = np.linspace(0, 2*np.pi, n)
+    man.start()
+    n = 200
+    r_max = 0.9
+    r = np.linspace(0.41, r_max, n)
+    theta = np.linspace(0, np.pi, n)
     phi = (1/2)*np.pi
-    r0 = 2*np.array([0, 0.1, 1])
-    # r0 = np.array([0.7071067811865476, 0.7071067811865476, 0])
-    m = np.array([0, 1, 0])
+    # r0 = np.array([0, 1.05, 0])
+    r0 = 1.05*np.array([0, 1, 0])
+    m = np.array([-1, 0, 0])
 
     start = time.time()
     time_0 = start
@@ -46,16 +47,16 @@ if __name__ == '__main__':
     print(f"{end - start:.2f}s triangulation")
 
     start = time.time()
-    Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
-    # Q, rs = functions.SCSM_Q_parallel(man, tc, areas, r0=r0, m=m)
+    # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
+    Q, rs = functions.SCSM_tri_sphere_numba(tc, areas, r0=r0, m=m)
     end = time.time()
     print(f"{end - start:.2f}s  Q calculation")
 
     start = time.time()
 
     # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
-    res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
-    res3 = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
+    # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
+    res = functions.numba_SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end
@@ -63,22 +64,26 @@ if __name__ == '__main__':
 
     res2 = res.copy()
 
-    diff_to_imag = np.abs(res1 - res2)
+    diff = np.abs(res1 - res2)
+    relative_diff = diff / np.linalg.norm(res1)
 
-    rerror_imag = np.linalg.norm(diff_to_imag) / np.linalg.norm(res1)
+    rerror_imag = np.linalg.norm(diff) / np.linalg.norm(res1)
 
     print("relative error:")
     print(rerror_imag)
     # print(res1[0, 0])
-    functions.plot_E(res1, r, theta, r_max)
     # functions.plot_E(res2, r, theta, r_max)
     # functions.plot_E(res2, r, theta, r_max)
     # functions.plot_E(diff_to_imag, r, theta, r_max)
     functions.plot_E_diff(res1, res2, r, theta, r_max, r0, m)
-    functions.plot_E_diff(res2, res3, r, theta, r_max, r0, m)
+    functions.plot_E(relative_diff, r, theta, r_max)
+    # plt.savefig("sample" + ".png")
+    # functions.plot_E_diff(res2, res3, r, theta, r_max, r0, m)
     # functions.plot_E(res4, r, theta, r_max)
     # functions.plot_E(res1, r, theta, r_max)
     # functions.plot_E(diff, r, theta, r_max)
+
+
 
 
 

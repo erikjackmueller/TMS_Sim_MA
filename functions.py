@@ -5,6 +5,7 @@ from functools import partial
 # from mpl_toolkits import mplot3d
 from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
+import numba
 import math
 import os
 import time
@@ -326,8 +327,13 @@ def plot_E(res, r, theta, r_max):
 def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
 
     diff = np.abs(res2 - res1)
-    fig, ax = plt.subplots(1, 3, subplot_kw={'projection': 'polar'}, figsize=(12,4))
-    ax1, ax2, ax3 = ax[0], ax[1], ax[2]
+    fig, ax = plt.subplots(1, 4, subplot_kw={'projection': 'polar'}, figsize=(18, 4))
+    ax0, ax1, ax2, ax3 = ax[0], ax[1], ax[2], ax[3]
+    im1 = ax0.pcolormesh(theta, r, res1, cmap='plasma', vmin=res1.min(), vmax=res1.max())
+    fig.colorbar(im1, ax=ax0)
+    ax0.set_yticklabels([])
+    ax0.set_rmax(r_max)
+    ax0.grid(True)
     f_max = max(res1.max(), res2.max())
     f_min = min(res1.min(), res2.min())
     im = ax1.pcolormesh(theta, r, res1, cmap='plasma', vmin=f_min, vmax=f_max)
@@ -343,12 +349,13 @@ def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     ax3.set_rmax(r_max)
     ax3.grid(True)
     fig.colorbar(im)
-    ax1.set_title("res1")
-    ax2.set_title("res2")
+    ax0.set_title("analytic (original scale)")
+    ax1.set_title("analytic (scaled to max-value)")
+    ax2.set_title("numeric")
     ax3.set_title("difference")
-    plt.subplots_adjust(wspace=0.6, hspace=0.4)
+    plt.subplots_adjust(wspace=0.7)
     rerror = np.linalg.norm(diff) / np.linalg.norm(res1)
-    fig.suptitle(f"relative error: {rerror}, r0 = {r0}, m = {m}" )
+    fig.suptitle(f"relative error: {rerror:.6f}, r0 = {r0}, m = {m}" )
 
     plt.show()
 # plot_default()
@@ -428,78 +435,104 @@ def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array
             A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
                       (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :])**3 + kroen(i, j))\
                       - kroen(i, j)/(eps0 * areas[i]) * ((1/2) + ((1j * omega * eps0)/sig))
+        B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
 
-        v_b = np.cross(m, (rs[i] - r0))
-        n_b = v_b / vnorm(v_b)
-        B[i] = 1j * omega * 1e-7 * np.dot(v_b, r_norm_i) / (vnorm(rs[i] - r0) ** 3)
-        # B[i] = 0
+    Q = np.linalg.solve(A, B)
+    return Q, rs
+
+@numba.jit(nopython=True, parallel=True)
+def SCSM_tri_sphere_numba(tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
+    rs = tri_centers
+    M = rs.shape[0]
+    A = np.zeros((M, M), dtype=np.complex_)
+    B = np.zeros(M, dtype=np.complex_)
+    eps0 = 8.854187812813e-12
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    def kroen(i, j):
+        return int(i == j)
+
+    for i in numba.prange(M):
+        r_norm_i = rs[i] / vnorm(rs[i])
+        for j in numba.prange(M):
+            A11 = np.dot((rs[i, :] - rs[j, :]), r_norm_i)
+            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :])**3 + kroen(i, j))
+            A1 = A11 / A12
+            A2 = kroen(i, j)/(eps0 * areas[i]) * ((1/2) + ((1j * omega * eps0)/sig))
+            A[i, j] = A1 - A2
+        B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
 
     Q = np.linalg.solve(A, B)
     return Q, rs
 
 def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
 
-    i = idxs
-    for j in range(M):
+    for k in range(len(idxs)):
+        i = idxs[k][0]
+        j = idxs[k][1]
         r_norm_i = rs[i] / vnorm(rs[i])
         A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
                   (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) \
-                  - kroen(i, j) / areas[i] * (1 / (2 * eps0) + 1j * omega / sig)
-        B[i] = 1e-7 * np.dot((np.cross(m, (rs[i] - r0))), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
+                  - kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
+        if j == M-1:
+            B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
 
+
+def A_parallel(idxs, A, rs, r_norm_i, areas, eps0, omega, sig, i):
+
+    for k in range(len(idxs)):
+        j = idxs[k]
+        A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
+                  (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) \
+                  - kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
 
 def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]),
                     sig=0.33, omega=1):
     rs = tri_centers
     M = rs.shape[0]
-    eps0 = 8.854187812813e-12
-
-    manager.start()
     A = manager.np_zeros([M, M], dtype=np.complex_)
-    B = manager.np_zeros(M)
-    # n_cpu = 5
+    B = manager.np_zeros(M, dtype=np.complex_)
+    eps0 = 8.854187812813e-12
     n_cpu = multiprocessing.cpu_count()
+    idx_sequence = product(list(range(M)), list(range(M)))
+    idx_list = list(idx_sequence)
     pool = multiprocessing.Pool(n_cpu)
-    idx_list = list(range(M))
-    workhorse_partial = partial(Q_parallel, A=A, B=B, rs=rs, r0=r0, m=m, areas=areas, eps0=eps0, omega=omega, sig=sig, M=M)
-    # idx_list_chunks = compute_chunks(idx_list, n_cpu)
-    pool.map(workhorse_partial, idx_list)
+    workhorse_partial = partial(Q_parallel, A=A, B=B, rs=rs, r0=r0, m=m, areas=areas, eps0=eps0,
+                                omega=omega, sig=sig, M=M)
+    idx_list_chunks = compute_chunks(idx_list, n_cpu)
+    pool.map(workhorse_partial, idx_list_chunks)
     pool.close()
-    Q = np.linalg.solve(A, B)
+    Q = np.linalg.solve(np.array(A), np.array(B))
     return Q, rs
 
-# @numba.jit(nopython=True, parallel=True)
-# def numba_SCSM_E_sphere(Q, r_q, r_sphere, theta, E, E_v, theta_size, r_sphere_size,
-#                         r_q_size, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1):
-#     eps0 = 8.854187812813e-12
-#     mu0 = 4*np.pi*1e-7
-#     E_v_1 = np.zeros(r_q_size, dtype=np.complex_)
-#     E_v_2 = np.zeros(r_q_size, dtype=np.complex_)
-#     E_v_3 = np.zeros(r_q_size, dtype=np.complex_)
-#
-#     for i_theta in numba.prange(theta_size):
-#         xs, ys = r_sphere * np.cos(theta[i_theta]), r_sphere * np.sin(theta[i_theta])
-#         rs = np.concatenate((xs, ys, np.zeros(xs.shape[0])), axis=0)  # r is now in carthesian coordinates!
-#         for i_r in numba.prange(r_sphere_size):
-#             rs_x = rs[0]
-#             rs_y = rs[1]
-#             rs_z = rs[2]
-#             for n in numba.prange(r_q_size):
-#                 E_v_1[n] = 1#Q[n] * (rs_x[i_r] - r_q[n]) / (4 * np.pi * eps0 *
-#                 np.linalg.norm(rs_x[i_r] - r_q[n]) ** 3) - (1j * omega * mu0) /
-#                 (4 * np.pi * np.linalg.norm(rs_x[i_r] - r0) ** 3) * (np.cross(m, (rs_x[i_r] - r0)))
-#                 # E_v_2[n] = Q[n] * (rs_y[i_r] - r_q[n]) / (4 * np.pi * eps0 *
-#                 np.linalg.norm(rs_y[i_r] - r_q[n]) ** 3) - (1j * omega * mu0) /
-#                 (4 * np.pi * np.linalg.norm(rs_y[i_r] - r0) ** 3) * (np.cross(m, (rs_y[i_r] - r0)))
-#                 # E_v_3[n] = Q[n] * (rs_z[i_r] - r_q[n]) / (4 * np.pi * eps0 *
-#                 np.linalg.norm(rs_z[i_r] - r_q[n]) ** 3) - (1j * omega * mu0) /
-#                 (4 * np.pi * np.linalg.norm(rs_z[i_r] - r0) ** 3) * (np.cross(m, (rs_z[i_r] - r0)))
-#             E[i_r, i_theta] = np.sqrt(E_v_1.imag.sum(axis=1)**2 + E_v_2.imag.sum(axis=1)**2 /
-#             + E_v_3.imag.sum(axis=1)**2)
-#             # E[i_r, i_theta] = vnorm(E_v.imag.sum(axis=1)) # alternative for inly imaginary part
-#     print(i_theta+1)
-#     return E
+@numba.jit(nopython=True, parallel=True)
+def numba_SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1):
 
+    eps0 = 8.854187812813e-12
+    I = r_sphere.shape[0]
+    J = theta.shape[0]
+    N = r_q.shape[0]
+    E = np.zeros((r_sphere.shape[0], theta.shape[0]))
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    for i in numba.prange(I):
+        for j in numba.prange(J):
+
+            xs = r_sphere * np.cos(theta[j])
+            ys = r_sphere * np.sin(theta[j])
+            zs = np.zeros(xs.shape[0])
+            rs = np.vstack((xs, ys, zs)).T
+            r_v = rs[i]
+            grad_phi = np.zeros((3, N), dtype=np.complex_)
+            for n in numba.prange(N):
+                grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+                            vnorm(r_v - r0) ** 3)
+            E[i, j] = vnorm(E_complex.imag)
+    return E
 def SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1):
 
     eps0 = 8.854187812813e-12
@@ -549,7 +582,7 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     mu0 = 4*np.pi*1e-7
     # E_v = np.zeros([3, r_q.shape[0]], dtype=np.complex_)
 
-    manager.start()
+    # manager.start()
     I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
     E = manager.np_zeros([I, J])
     # n_cpu = 5
@@ -575,7 +608,20 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     #         # E[i, j, 0, :] = E_complex.real
     #         E[i, j] = vnorm(E_complex.imag)
 
+    for i in range(I):
+        for j in range(J):
 
+            xs = r_sphere * np.cos(theta[j])
+            ys = r_sphere * np.sin(theta[j])
+            zs = np.zeros(xs.shape[0])
+            rs = np.vstack((xs, ys, zs)).T
+            r_v = rs[i]
+            grad_phi = np.zeros((3, N), dtype=np.complex_)
+            for n in range(N):
+                grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            E_complex = grad_phi.sum(axis=1) - (1j * omega * 4 * np.pi * 1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (
+                np.cross(m, (r_v - r0)))
+            E[i, j] = vnorm(E_complex.imag)
 
     idx_list_chunks = compute_chunks(idx_list, n_cpu)
     pool.map(workhorse_partial, idx_list_chunks)
@@ -643,3 +689,20 @@ def compute_chunks(seq, num):
 
     return out
 
+def fibonacci_sphere_mesh(samples=1000):
+
+    points = []
+    phi = math.pi * (3. - math.sqrt(5.))  # golden angle in radians
+
+    for i in range(samples):
+        y = 1 - (i / float(samples - 1)) * 2  # y goes from 1 to -1
+        radius = math.sqrt(1 - y * y)  # radius at y
+
+        theta = phi * i  # golden angle increment
+
+        x = math.cos(theta) * radius
+        z = math.sin(theta) * radius
+
+        points.append((x, y, z))
+
+    return points
