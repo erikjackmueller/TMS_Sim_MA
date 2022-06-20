@@ -52,7 +52,7 @@ def read_sphere_mesh_from_txt(sizes, path):
 
     return trangle_centers, areas
 
-def read_sphere_mesh_from_txt_locations_only(sizes, path):
+def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False):
     """
     The locations from a .txt file are triangulated using Delaunay algorithm
     for that to work the 3D carthesian locations are converted to spherical coordinates
@@ -81,11 +81,13 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path):
     # for a flat trangle in space that should be (x1 + x2 + x3)/3, (y1 + y2 + y3)/3, (z1 + z2 + z3)/3
     # for the area the formula is S = 1/2|AB x AC|, x is the crossproduct in this case
 
-
-    for i in range(len(connections[0, :])):
+    n = len(connections[0, :])
+    triangle_points = np.zeros((n, 3, 3))
+    for i in range(n):
         p1 = locations[:, int(connections[0, i])]
         p2 = locations[:, int(connections[1, i])]
         p3 = locations[:, int(connections[2, i])]
+        triangle_points[n] = np.array(p1, p2, p3)
         p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
         p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
         p_c_3 = (p1[2] + p2[2] + p3[2]) / 3
@@ -97,8 +99,10 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path):
     # plot_mesh(locations, connections, 0, 1200, centers=triangle_centers)
     # ax1 = plt.axes(projection='3d')
     # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
-
-    return triangle_centers, areas
+    if tri_points:
+        return triangle_centers, areas, triangle_points
+    else:
+        return triangle_centers, areas
 
 
 
@@ -362,6 +366,7 @@ def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
 def sphere_to_carthesian(r, theta, phi):
     return r*np.sin(theta)*np.cos(phi), r*np.sin(theta)*np.sin(phi), r*np.cos(theta)
 
+
 def carthesian_to_sphere(r_carth):
     r_sphere = np.zeros(r_carth.shape)
     xy = r_carth[:, 0] ** 2 + r_carth[:, 1] ** 2
@@ -369,6 +374,7 @@ def carthesian_to_sphere(r_carth):
     r_sphere[:, 1] = np.arctan2(np.sqrt(xy), r_carth[:, 2])  # for elevation angle defined from Z-axis down
     r_sphere[:, 2] = np.arctan2(r_carth[:, 1], r_carth[:, 0])
     return r_sphere
+
 
 def trapezoid_area_and_centre(rs):
     b1_v = rs[1, 0, :] - rs[0, 0, :]
@@ -388,11 +394,11 @@ def kroen(a, b):
     else:
         return 0
 
-def SCSM_trapezes(N=100, r=8, r0 = np.array([0, 0, 11]), m = np.array([0, 1, 0]), sig = 0.33, omega=1):
 
+def SCSM_trapezes(N=100, r=8, r0=np.array([0, 0, 11]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
     eps0 = 8.854187812813e-12
-    phis  = np.linspace(0, 2*np.pi, N)
-    thetas  = np.linspace(0, 2*np.pi, N)
+    phis = np.linspace(0, 2*np.pi, N)
+    thetas = np.linspace(0, 2*np.pi, N)
     M = N**2
     rs = np.zeros([M, 3])
     areas = np.zeros(M)
@@ -409,7 +415,7 @@ def SCSM_trapezes(N=100, r=8, r0 = np.array([0, 0, 11]), m = np.array([0, 1, 0])
             rs_trap[1, 0, :] = sphere_to_carthesian(r, thetas[i], phis[j+1])
             rs_trap[1, 1, :] = sphere_to_carthesian(r, thetas[i+1], phis[j+1])
             areas[n], rs[n,:], norm_vects[n, :] = trapezoid_area_and_centre(rs_trap)
-            n+=1
+            n += 1
 
     for u in range(M):
         for v in range(M):
@@ -421,6 +427,7 @@ def SCSM_trapezes(N=100, r=8, r0 = np.array([0, 0, 11]), m = np.array([0, 1, 0])
 
     Q = np.linalg.solve(A_real, B)
     return Q, rs
+
 
 def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array([0, 1, 0]), sig = 0.33, omega=1):
     rs = tri_centers
@@ -439,6 +446,7 @@ def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array
 
     Q = np.linalg.solve(A, B)
     return Q, rs
+
 
 @numba.jit(nopython=True, parallel=True)
 def SCSM_tri_sphere_numba(tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
@@ -467,8 +475,8 @@ def SCSM_tri_sphere_numba(tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.arr
     Q = np.linalg.solve(A, B)
     return Q, rs
 
-def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
 
+def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
     for k in range(len(idxs)):
         i = idxs[k][0]
         j = idxs[k][1]
@@ -481,12 +489,12 @@ def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
 
 
 def A_parallel(idxs, A, rs, r_norm_i, areas, eps0, omega, sig, i):
-
     for k in range(len(idxs)):
         j = idxs[k]
         A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
                   (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) \
                   - kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
+
 
 def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]),
                     sig=0.33, omega=1):
@@ -507,14 +515,16 @@ def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.
     Q = np.linalg.solve(np.array(A), np.array(B))
     return Q, rs
 
-@numba.jit(nopython=True, parallel=True)
-def numba_SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1):
 
+@numba.jit(nopython=True, parallel=True)
+def numba_SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1,
+                        near_field=False):
     eps0 = 8.854187812813e-12
     I = r_sphere.shape[0]
     J = theta.shape[0]
     N = r_q.shape[0]
     E = np.zeros((r_sphere.shape[0], theta.shape[0]))
+
     def vnorm(x):
         return np.linalg.norm(x)
 
@@ -533,8 +543,9 @@ def numba_SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.ar
                             vnorm(r_v - r0) ** 3)
             E[i, j] = vnorm(E_complex.imag)
     return E
-def SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1):
 
+
+def SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1):
     eps0 = 8.854187812813e-12
     I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
     E = np.zeros([r_sphere.shape[0], theta.shape[0]])
@@ -561,7 +572,8 @@ def SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0
 
     return E
 
-def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N):
+
+def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N, near_field, tri_points):
     for k in range(len(idxs)):
         i = idxs[k][0]
         j = idxs[k][1]
@@ -570,17 +582,26 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
         r_v = rs[:, i]
         grad_phi = np.zeros([3, N], dtype=np.complex_)
         for n in range(N):
-            grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            if near_field:
+                eps_r = vnorm(r_q[n] - r_v)
+                if eps_r < 0.1:
+                    grad_phi[:, n] = E_near(Q[n], tri_points[0], tri_points[1], tri_points[2], r_v)
+                else:
+                    grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            else:
+                grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
         E_complex = 1*grad_phi.sum(axis=1) - 1*(1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (vnorm(r_v - r0) ** 3)
-        # E[i, j] = vnorm(E_complex.imag)
-        # E[i, j, 0, :] = E_complex.real
         E[i, j] = vnorm(E_complex.imag)
 
+
 def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]),
-                           phi=0, omega=1):
+                           phi=0, omega=1, near_field=False, tri_points=None):
     eps0 = 8.854187812813e-12
     mu0 = 4*np.pi*1e-7
     # E_v = np.zeros([3, r_q.shape[0]], dtype=np.complex_)
+
+    if near_field and tri_points is None:
+        raise ValueError("near_field approximation specified, but no valid triangle points were given!")
 
     # manager.start()
     I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
@@ -593,7 +614,7 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     idx_list = list(idx_sequence)
 
     workhorse_partial = partial(E_parallel, E=E, Q=Q, r_sphere=r_sphere, r_q=r_q, r0=r0, theta=theta,
-                                m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N)
+                                m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N, near_field=near_field)
     # for i in range(I):
     #     for j in range(J):
     #
@@ -608,20 +629,20 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     #         # E[i, j, 0, :] = E_complex.real
     #         E[i, j] = vnorm(E_complex.imag)
 
-    for i in range(I):
-        for j in range(J):
-
-            xs = r_sphere * np.cos(theta[j])
-            ys = r_sphere * np.sin(theta[j])
-            zs = np.zeros(xs.shape[0])
-            rs = np.vstack((xs, ys, zs)).T
-            r_v = rs[i]
-            grad_phi = np.zeros((3, N), dtype=np.complex_)
-            for n in range(N):
-                grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-            E_complex = grad_phi.sum(axis=1) - (1j * omega * 4 * np.pi * 1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (
-                np.cross(m, (r_v - r0)))
-            E[i, j] = vnorm(E_complex.imag)
+    # for i in range(I):
+    #     for j in range(J):
+    #
+    #         xs = r_sphere * np.cos(theta[j])
+    #         ys = r_sphere * np.sin(theta[j])
+    #         zs = np.zeros(xs.shape[0])
+    #         rs = np.vstack((xs, ys, zs)).T
+    #         r_v = rs[i]
+    #         grad_phi = np.zeros((3, N), dtype=np.complex_)
+    #         for n in range(N):
+    #             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+    #         E_complex = grad_phi.sum(axis=1) - (1j * omega * 4 * np.pi * 1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (
+    #             np.cross(m, (r_v - r0)))
+    #         E[i, j] = vnorm(E_complex.imag)
 
     idx_list_chunks = compute_chunks(idx_list, n_cpu)
     pool.map(workhorse_partial, idx_list_chunks)
@@ -638,7 +659,9 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
 # ax.scatter(xs, ys, zs)
 # plt.show()
 
+def E_near(Q, p1, p2, p3, r):
 
+    return 0
 
 
 def compute_chunks(seq, num):
