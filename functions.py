@@ -12,8 +12,8 @@ import time
 import multiprocessing
 import multiprocessing.managers
 
-def read_sphere_mesh_from_txt(sizes, path):
 
+def read_sphere_mesh_from_txt(sizes, path):
     files = ["con_1_" + str(sizes[0]), "con_2_" + str(sizes[0]), "con_3_" + str(sizes[0]), "x_" + str(sizes[0]),
              "y_" + str(sizes[0]), "z_" + str(sizes[0])]
     connections = np.zeros([3, sizes[1]])
@@ -22,7 +22,7 @@ def read_sphere_mesh_from_txt(sizes, path):
         if i < 3:
             connections[i, :] = np.genfromtxt(os.path.join(path, files[i] + ".txt"), dtype=int)
         else:
-            locations[i-3, :] = np.genfromtxt(os.path.join(path, files[i] + ".txt"), dtype=float)
+            locations[i - 3, :] = np.genfromtxt(os.path.join(path, files[i] + ".txt"), dtype=float)
     trangle_centers = np.zeros([len(connections[0, :]), 3])
     areas = np.zeros(len(connections[0, :]))
 
@@ -37,7 +37,6 @@ def read_sphere_mesh_from_txt(sizes, path):
     # plot_triangle(ax1, locations, connections, 2) # they're only almost the same
     # plot_triangle(ax1, locations, connections, 12)
 
-
     for i in range(len(connections[0, :])):
         p1 = locations[:, int(connections[0, i])]
         p2 = locations[:, int(connections[1, i])]
@@ -48,9 +47,10 @@ def read_sphere_mesh_from_txt(sizes, path):
         trangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
         line1_2 = p2 - p1
         line1_3 = p3 - p1
-        areas[i] = 0.5*vnorm(np.cross(line1_2, line1_3))
+        areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
 
     return trangle_centers, areas
+
 
 def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False):
     """
@@ -87,14 +87,14 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False):
         p1 = locations[:, int(connections[0, i])]
         p2 = locations[:, int(connections[1, i])]
         p3 = locations[:, int(connections[2, i])]
-        triangle_points[n] = np.array(p1, p2, p3)
+        triangle_points[i][:][:] = np.vstack((p1, p2, p3))
         p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
         p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
         p_c_3 = (p1[2] + p2[2] + p3[2]) / 3
         triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
         line1_2 = p2 - p1
         line1_3 = p3 - p1
-        areas[i] = 0.5*vnorm(np.cross(line1_2, line1_3))
+        areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
 
     # plot_mesh(locations, connections, 0, 1200, centers=triangle_centers)
     # ax1 = plt.axes(projection='3d')
@@ -103,7 +103,6 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False):
         return triangle_centers, areas, triangle_points
     else:
         return triangle_centers, areas
-
 
 
 def plot_mesh(locations, connections, n1, n2, centers=None):
@@ -117,7 +116,6 @@ def plot_mesh(locations, connections, n1, n2, centers=None):
         ydata = np.array([locations[1, c1], locations[1, c2], locations[1, c3], locations[1, c1]])
         zdata = np.array([locations[2, c1], locations[2, c2], locations[2, c3], locations[2, c1]])
 
-
         ax.scatter3D(xdata, ydata, zdata)
         ax.plot3D(xdata, ydata, zdata)
     if centers.dtype == 'float64':
@@ -128,8 +126,8 @@ def plot_mesh(locations, connections, n1, n2, centers=None):
         ax.scatter3D(xc, yc, zc, marker='*')
     plt.show()
 
-def plot_triangle(ax, locations, connections, idxs, centers=None):
 
+def plot_triangle(ax, locations, connections, idxs, centers=None):
     i = idxs - 1
     c1 = int(connections[0, i])
     c2 = int(connections[1, i])
@@ -146,27 +144,30 @@ def plot_triangle(ax, locations, connections, idxs, centers=None):
     ax.plot3D(xdata, ydata, zdata)
     plt.show()
 
-def func_two_D_dist(r, theta, theta0=0,r0=0.5, sigma=1):
+
+def func_two_D_dist(r, theta, theta0=0, r0=0.5, sigma=1):
     # r_0 = r0*np.ones(r.shape[0])
     r_out = np.zeros([r.shape[0], theta.shape[0]])
-    x0, y0 = np.ones(r.shape[0])*r0*np.cos(theta0), np.ones(r.shape[0])*r0*np.sin(theta0)
+    x0, y0 = np.ones(r.shape[0]) * r0 * np.cos(theta0), np.ones(r.shape[0]) * r0 * np.sin(theta0)
     for i_theta in range(theta.shape[0]):
-        xs, ys = r*np.cos(theta[i_theta]), r*np.sin(theta[i_theta])
-        r_out[:, i_theta] = np.sqrt((xs - x0)**2 + (ys - y0)**2)
-
+        xs, ys = r * np.cos(theta[i_theta]), r * np.sin(theta[i_theta])
+        r_out[:, i_theta] = np.sqrt((xs - x0) ** 2 + (ys - y0) ** 2)
 
     return (r_out + 1e-15)
 
+
 def vnorm(x):
     return np.linalg.norm(x)
+
 
 def vangle(x1, x2):
     u_x1 = x1 / np.linalg.norm(x1)
     u_x2 = x2 / np.linalg.norm(x2)
     return np.arccos(np.dot(u_x1, u_x2))
 
-def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([0, -1, 0]),phi=0*np.pi, omega=1):
-    mu0 = 4*np.pi*1e-7
+
+def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([0, -1, 0]), phi=0 * np.pi, omega=1):
+    mu0 = 4 * np.pi * 1e-7
     E = np.zeros([r_sphere.shape[0], theta.shape[0]])
     r0 = vnorm(r0_v)
     for i_theta in range(theta.shape[0]):
@@ -179,13 +180,15 @@ def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([
             r_v = rs[:, i_r]
             a_v = r0_v - r_v
             a = vnorm(a_v)
-            F = (r0*a + np.dot(r0_v, a_v))*a
-            nab_F = ((a**2/r0**2) + 2*a + 2*r0 + (np.dot(r0_v, a_v)/a))*r0_v - (a + 2*r0 + (np.dot(r0_v, a_v)/a))*r_v
-            E_v = omega*mu0/(4*np.pi*F**2) * (F*np.cross(r_v, m) - np.dot(m, nab_F)*np.cross(r_v, r0_v))
+            F = (r0 * a + np.dot(r0_v, a_v)) * a
+            nab_F = ((a ** 2 / r0 ** 2) + 2 * a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r0_v - (
+                        a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r_v
+            E_v = omega * mu0 / (4 * np.pi * F ** 2) * (F * np.cross(r_v, m) - np.dot(m, nab_F) * np.cross(r_v, r0_v))
             E[i_r, i_theta] = vnorm(E_v)
     return E
 
-def func_3_shells(r_sphere, theta, r0_v=np.array([12, 0, 0]), r_shells = np.array([7, 7.5, 8]),
+
+def func_3_shells(r_sphere, theta, r0_v=np.array([12, 0, 0]), r_shells=np.array([7, 7.5, 8]),
                   sigmas=np.array([0.33, 0.01, 0.43])):
     # this is a function for the magnetic filed induced by an electric dipole (antenna for example!)
     H = np.zeros([r_sphere.shape[0], theta.shape[0]])
@@ -204,37 +207,50 @@ def func_3_shells(r_sphere, theta, r0_v=np.array([12, 0, 0]), r_shells = np.arra
                 P = legendre(l)(np.cos(gamma))
                 # l is the subscript for the order of the polynomial
                 # cos(gamma) is the argument
-                A = ((2*l + 1)**3 / 2*l) / (((s1/s2 + 1)*l + 1)*((s2/s3 + 1)*l + 1) +
-                                            (s1/s2 - 1)*(s2/s3 - 1)*l*(l+1)*(a/b)**(2*l + 1) +
-                                            (s2/s3 - 1)*(l + 1)*((s1/s2 + 1)*l + 1)*(b/c)**(2*l + 1) +
-                                            (s1/s2 - 1)*(l + 1)*((s2/s3 + 1)*(l + 1) - 1)*(a/c)**(2*l + 1))
-                H_i[l-1] = A * (r0**l/c**(l + 1)) * P
+                A = ((2 * l + 1) ** 3 / 2 * l) / (((s1 / s2 + 1) * l + 1) * ((s2 / s3 + 1) * l + 1) +
+                                                  (s1 / s2 - 1) * (s2 / s3 - 1) * l * (l + 1) * (a / b) ** (2 * l + 1) +
+                                                  (s2 / s3 - 1) * (l + 1) * ((s1 / s2 + 1) * l + 1) * (b / c) ** (
+                                                              2 * l + 1) +
+                                                  (s1 / s2 - 1) * (l + 1) * ((s2 / s3 + 1) * (l + 1) - 1) * (a / c) ** (
+                                                              2 * l + 1))
+                H_i[l - 1] = A * (r0 ** l / c ** (l + 1)) * P
 
-            H[i_r, i_theta] = 1 / (2*np.pi*s3) * np.sum(H_i)
+            H[i_r, i_theta] = 1 / (2 * np.pi * s3) * np.sum(H_i)
     return H
 
+
 def v(n):
-    return (1/2)*(-1 + np.sqrt(1 + 4*n*(n + 1)))
+    return (1 / 2) * (-1 + np.sqrt(1 + 4 * n * (n + 1)))
+
 
 def P(n, v, r):
-    return r**v(n)
-def P_prime(n, v, r):
-    return v(n)*r**(v(n) - 1)
-def Q(n, v, r):
-    return r**(-v(n) - 1)
-def Q_prime(n, v, r):
-    return (-v(n) - 1)*r**(-v(n) - 2)
-def Y_real(l, m, alpha, theta, phi=0):
-    c = np.sqrt((2*l + 1) / (np.pi*4) * (math.factorial(l-m)/math.factorial(l+m)))
-    return c*legendre(l,m)(np.cos(theta))*np.cos(m*phi)
+    return r ** v(n)
 
-def func_de_Munck_potential(rs, theta, r0_v=np.array([12, 0, 0]), m=np.array([0, 1, 0]), r_shells = np.array([7, 7.5, 8]),
-                  sigmas=np.array([0.43, 0.01, 0.33]), n=5):
-    #sigmas from outside to inside
+
+def P_prime(n, v, r):
+    return v(n) * r ** (v(n) - 1)
+
+
+def Q(n, v, r):
+    return r ** (-v(n) - 1)
+
+
+def Q_prime(n, v, r):
+    return (-v(n) - 1) * r ** (-v(n) - 2)
+
+
+def Y_real(l, m, alpha, theta, phi=0):
+    c = np.sqrt((2 * l + 1) / (np.pi * 4) * (math.factorial(l - m) / math.factorial(l + m)))
+    return c * legendre(l, m)(np.cos(theta)) * np.cos(m * phi)
+
+
+def func_de_Munck_potential(rs, theta, r0_v=np.array([12, 0, 0]), m=np.array([0, 1, 0]), r_shells=np.array([7, 7.5, 8]),
+                            sigmas=np.array([0.43, 0.01, 0.33]), n=5):
+    # sigmas from outside to inside
     phi = np.zeros([n, rs.shape[0], theta.shape[0]])
     r_0 = vnorm(r0_v)
     m_r = vnorm(m)
-    m_theta = np.arccos(m[2]/m_r)
+    m_theta = np.arccos(m[2] / m_r)
     r0, r1, r2 = r_shells[2], r_shells[1], r_shells[0]
     A = np.zeros([2, 3])
     B = np.zeros([2, 3])
@@ -243,29 +259,29 @@ def func_de_Munck_potential(rs, theta, r0_v=np.array([12, 0, 0]), m=np.array([0,
         # A^1_2 = A[0, 1]
         # change 1 -> 0; add [ ] in arrays
         AB_0_1 = np.dot(np.dot(np.linalg.inv(np.array([[P(n, v, r1), Q(n, v, r1)], [sigmas[1] * P_prime(n, v, r1),
-                                                                            sigmas[1] * Q_prime(n, v, r1)]])),
+                                                                                    sigmas[1] * Q_prime(n, v, r1)]])),
                                np.array([[P(n, v, r2), Q(n, v, r2)], [sigmas[2] * P_prime(n, v, r2),
-                                                                     sigmas[2] * Q_prime(n, v, r2)]])),
+                                                                      sigmas[2] * Q_prime(n, v, r2)]])),
                         np.array([A[0, 2], B[0, 2]]))
         A[0, 1], B[0, 1] = AB_0_1[0], AB_0_1[1]
         AB_0_0 = np.dot(np.dot(np.linalg.inv(np.array([[P(n, v, r0), Q(n, v, r0)], [sigmas[0] * P_prime(n, v, r0),
-                                                                            sigmas[0] * Q_prime(n, v, r0)]])),
+                                                                                    sigmas[0] * Q_prime(n, v, r0)]])),
                                np.array([[P(n, v, r1), Q(n, v, r1)], [sigmas[1] * P_prime(n, v, r1),
-                                                                     sigmas[1] * Q_prime(n, v, r1)]])),
+                                                                      sigmas[1] * Q_prime(n, v, r1)]])),
                         np.array([A[0, 1], B[0, 1]]))
         A[0, 0], B[0, 0] = AB_0_0[0], AB_0_0[1]
-        A[1, 0] = -Q_prime(n, v, r0)/ P_prime(n, v, r0)
+        A[1, 0] = -Q_prime(n, v, r0) / P_prime(n, v, r0)
         B[1, 0] = 1
         AB_1_1 = np.dot(np.dot(np.linalg.inv(np.array([[P(n, v, r1), Q(n, v, r1)], [sigmas[1] * P_prime(n, v, r1),
-                                                                            sigmas[1] * Q_prime(n, v, r1)]])),
+                                                                                    sigmas[1] * Q_prime(n, v, r1)]])),
                                np.array([[P(n, v, r0), Q(n, v, r0)], [sigmas[0] * P_prime(n, v, r0),
-                                                                     sigmas[0] * Q_prime(n, v, r0)]])),
+                                                                      sigmas[0] * Q_prime(n, v, r0)]])),
                         np.array([A[0, 1], B[0, 1]]))
         A[1, 1], B[1, 1] = AB_1_1[0], AB_1_1[1]
         AB_1_2 = np.dot(np.dot(np.linalg.inv(np.array([[P(n, v, r2), Q(n, v, r2)], [sigmas[2] * P_prime(n, v, r2),
-                                                                            sigmas[2] * Q_prime(n, v, r2)]])),
+                                                                                    sigmas[2] * Q_prime(n, v, r2)]])),
                                np.array([[P(n, v, r1), Q(n, v, r1)], [sigmas[1] * P_prime(n, v, r1),
-                                                                     sigmas[1] * Q_prime(n, v, r1)]])),
+                                                                      sigmas[1] * Q_prime(n, v, r1)]])),
                         np.array([A[0, 1], B[0, 1]]))
         A[1, 2], B[1, 2] = AB_1_2[0], AB_1_2[1]
         for i_theta in range(theta.shape[0]):
@@ -280,9 +296,11 @@ def func_de_Munck_potential(rs, theta, r0_v=np.array([12, 0, 0]), m=np.array([0,
                     R_2 = A[1, 0] * Q(n, v, r) + B[1, 0] * P(n, v, r)
                 R_1 = A[0, 0] * Q(n, v, r_0) + B[0, 0] * P(n, v, r_0)
 
-                phi[i_n, i_theta, i_r] = (R_2/sigmas[2]*B[1, 2])*(m_r*R_1*Y_real(n, 0, 0, th) + m_theta*r_0**-1*R_1*Y_real(n, 1, 0, th))
+                phi[i_n, i_theta, i_r] = (R_2 / sigmas[2] * B[1, 2]) * (
+                            m_r * R_1 * Y_real(n, 0, 0, th) + m_theta * r_0 ** -1 * R_1 * Y_real(n, 1, 0, th))
 
-    return -1/(4*np.pi) * np.sum(phi, axis=0)
+    return -1 / (4 * np.pi) * np.sum(phi, axis=0)
+
 
 def plot_default():
     # take r_head = 8
@@ -290,10 +308,10 @@ def plot_default():
     # r_shells=np.array([7, 7.5, 8])
     # sigmas=np.array([0.33, 0.01, 0.43]
     r = np.linspace(0.01, 8, 400)
-    theta = np.linspace(0, 2*np.pi, 400)
-    line1 = 7*np.ones(400)
-    line2 = 7.5*np.ones(400)
-    line3 = 8*np.ones(400)
+    theta = np.linspace(0, 2 * np.pi, 400)
+    line1 = 7 * np.ones(400)
+    line2 = 7.5 * np.ones(400)
+    line3 = 8 * np.ones(400)
     r0 = np.array([12, 0, 0])
     ax = plt.subplot(111, projection='polar')
     res = reciprocity_three_D(r, theta, r0_v=r0, m=np.array([0, 1, 0]))
@@ -314,8 +332,8 @@ def plot_default():
 
     plt.show()
 
-def plot_E(res, r, theta, r_max):
 
+def plot_E(res, r, theta, r_max):
     fig = plt.figure()
     ax = plt.subplot(111, projection='polar')
     f_min, f_max = res.min(), res.max()
@@ -328,8 +346,8 @@ def plot_E(res, r, theta, r_max):
 
     plt.show()
 
-def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
 
+def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     diff = np.abs(res2 - res1)
     fig, ax = plt.subplots(1, 4, subplot_kw={'projection': 'polar'}, figsize=(18, 4))
     ax0, ax1, ax2, ax3 = ax[0], ax[1], ax[2], ax[3]
@@ -359,12 +377,14 @@ def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     ax3.set_title("difference")
     plt.subplots_adjust(wspace=0.7)
     rerror = np.linalg.norm(diff) / np.linalg.norm(res1)
-    fig.suptitle(f"relative error: {rerror:.6f}, r0 = {r0}, m = {m}" )
+    fig.suptitle(f"relative error: {rerror:.6f}, r0 = {r0}, m = {m}")
 
     plt.show()
+
+
 # plot_default()
 def sphere_to_carthesian(r, theta, phi):
-    return r*np.sin(theta)*np.cos(phi), r*np.sin(theta)*np.sin(phi), r*np.cos(theta)
+    return r * np.sin(theta) * np.cos(phi), r * np.sin(theta) * np.sin(phi), r * np.cos(theta)
 
 
 def carthesian_to_sphere(r_carth):
@@ -380,13 +400,14 @@ def trapezoid_area_and_centre(rs):
     b1_v = rs[1, 0, :] - rs[0, 0, :]
     b2_v = rs[1, 1, :] - rs[0, 1, :]
     a_v = rs[0, 1, :] - rs[0, 0, :]
-    db_v = 1/2*(b1_v-b2_v)
+    db_v = 1 / 2 * (b1_v - b2_v)
     b1, b2, db, a = vnorm(b1_v), vnorm(b2_v), vnorm(db_v), vnorm(a_v)
-    h = np.sqrt(a**2 - db**2)
-    area = 1/2*h*(b1+b2)
-    r_center = rs[0, 0, :] + b1_v/2 + 1/2*(a_v + db_v)
+    h = np.sqrt(a ** 2 - db ** 2)
+    area = 1 / 2 * h * (b1 + b2)
+    r_center = rs[0, 0, :] + b1_v / 2 + 1 / 2 * (a_v + db_v)
     n_v = np.cross(b1_v, a_v)
     return area, r_center, n_v
+
 
 def kroen(a, b):
     if a == b:
@@ -397,39 +418,40 @@ def kroen(a, b):
 
 def SCSM_trapezes(N=100, r=8, r0=np.array([0, 0, 11]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
     eps0 = 8.854187812813e-12
-    phis = np.linspace(0, 2*np.pi, N)
-    thetas = np.linspace(0, 2*np.pi, N)
-    M = N**2
+    phis = np.linspace(0, 2 * np.pi, N)
+    thetas = np.linspace(0, 2 * np.pi, N)
+    M = N ** 2
     rs = np.zeros([M, 3])
     areas = np.zeros(M)
-    rs_trap = np.zeros([2,2,3]) # 2x2 matrix with vectors as entries
+    rs_trap = np.zeros([2, 2, 3])  # 2x2 matrix with vectors as entries
     norm_vects = np.zeros([M, 3])
     A_real = np.zeros([M, M])
     A_imag = np.zeros([M, M])
     B = np.zeros(M)
     n = 0
-    for i in range(N-1):
-        for j in range(N-1):
+    for i in range(N - 1):
+        for j in range(N - 1):
             rs_trap[0, 0, :] = sphere_to_carthesian(r, thetas[i], phis[j])
-            rs_trap[0, 1, :] = sphere_to_carthesian(r, thetas[i+1], phis[j])
-            rs_trap[1, 0, :] = sphere_to_carthesian(r, thetas[i], phis[j+1])
-            rs_trap[1, 1, :] = sphere_to_carthesian(r, thetas[i+1], phis[j+1])
-            areas[n], rs[n,:], norm_vects[n, :] = trapezoid_area_and_centre(rs_trap)
+            rs_trap[0, 1, :] = sphere_to_carthesian(r, thetas[i + 1], phis[j])
+            rs_trap[1, 0, :] = sphere_to_carthesian(r, thetas[i], phis[j + 1])
+            rs_trap[1, 1, :] = sphere_to_carthesian(r, thetas[i + 1], phis[j + 1])
+            areas[n], rs[n, :], norm_vects[n, :] = trapezoid_area_and_centre(rs_trap)
             n += 1
 
     for u in range(M):
         for v in range(M):
-            A1 = 1/(4*np.pi * eps0 * vnorm(rs[u, :] - rs[v, :])**3 + kroen(u, v))*(rs[u, :] - rs[v, :])@norm_vects[v]
-            A2 = kroen(u, v)/2*eps0*areas[u]*(1/2 + (omega*eps0/sig)* 1j)
+            A1 = 1 / (4 * np.pi * eps0 * vnorm(rs[u, :] - rs[v, :]) ** 3 + kroen(u, v)) * (rs[u, :] - rs[v, :]) @ \
+                 norm_vects[v]
+            A2 = kroen(u, v) / 2 * eps0 * areas[u] * (1 / 2 + (omega * eps0 / sig) * 1j)
             A = np.array([A1, 0]) - np.array([A2.real, A2.imag])
             A_real[u, v] = A[0]
-        B[u] = vnorm(1e-7*(np.cross(m, (rs[u] - r0)))/(vnorm(rs[u] - r0)**3))
+        B[u] = vnorm(1e-7 * (np.cross(m, (rs[u] - r0))) / (vnorm(rs[u] - r0) ** 3))
 
     Q = np.linalg.solve(A_real, B)
     return Q, rs
 
 
-def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array([0, 1, 0]), sig = 0.33, omega=1):
+def SCSM_tri_sphere(tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
     rs = tri_centers
     M = rs.shape[0]
     A = np.zeros([M, M], dtype=np.complex_)
@@ -440,8 +462,8 @@ def SCSM_tri_sphere(tri_centers, areas, r0 = np.array([0, 0, 1.1]), m = np.array
         for j in range(M):
             r_norm_j = rs[j] / vnorm(rs[j])
             A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
-                      (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :])**3 + kroen(i, j))\
-                      - kroen(i, j)/(eps0 * areas[i]) * ((1/2) + ((1j * omega * eps0)/sig))
+                      (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) \
+                      - kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
         B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
 
     Q = np.linalg.solve(A, B)
@@ -466,9 +488,9 @@ def SCSM_tri_sphere_numba(tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.arr
         r_norm_i = rs[i] / vnorm(rs[i])
         for j in numba.prange(M):
             A11 = np.dot((rs[i, :] - rs[j, :]), r_norm_i)
-            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :])**3 + kroen(i, j))
+            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
             A1 = A11 / A12
-            A2 = kroen(i, j)/(eps0 * areas[i]) * ((1/2) + ((1j * omega * eps0)/sig))
+            A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
             A[i, j] = A1 - A2
         B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
 
@@ -484,7 +506,7 @@ def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
         A[i, j] = np.dot((rs[i, :] - rs[j, :]), r_norm_i) / \
                   (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)) \
                   - kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
-        if j == M-1:
+        if j == M - 1:
             B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
 
 
@@ -540,7 +562,7 @@ def numba_SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.ar
             for n in numba.prange(N):
                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
             E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
-                            vnorm(r_v - r0) ** 3)
+                    vnorm(r_v - r0) ** 3)
             E[i, j] = vnorm(E_complex.imag)
     return E
 
@@ -568,12 +590,12 @@ def SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0
         if i == 0:
             time_1 = time.time()
         print(f"radius {i + 1} of {theta.shape[0]} done, remaining time: "
-          f"{format(((time_1 - start_time) * theta.shape[0] - (time.time() - start_time)) / 60, '.1f')} minutes")
+              f"{format(((time_1 - start_time) * theta.shape[0] - (time.time() - start_time)) / 60, '.1f')} minutes")
 
     return E
 
 
-def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N, near_field, tri_points):
+def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N, near_field, tri_points, near_radius):
     for k in range(len(idxs)):
         i = idxs[k][0]
         j = idxs[k][1]
@@ -584,20 +606,21 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
         for n in range(N):
             if near_field:
                 eps_r = vnorm(r_q[n] - r_v)
-                if eps_r < 0.1:
-                    grad_phi[:, n] = E_near(Q[n], tri_points[0], tri_points[1], tri_points[2], r_v)
+                if eps_r < near_radius:
+                    grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
                 else:
                     grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
             else:
                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-        E_complex = 1*grad_phi.sum(axis=1) - 1*(1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (vnorm(r_v - r0) ** 3)
+        E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+                    vnorm(r_v - r0) ** 3)
         E[i, j] = vnorm(E_complex.imag)
 
 
 def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]),
-                           phi=0, omega=1, near_field=False, tri_points=None):
+                           phi=0, omega=1, near_field=False, tri_points=None, near_radius=0.1):
     eps0 = 8.854187812813e-12
-    mu0 = 4*np.pi*1e-7
+    mu0 = 4 * np.pi * 1e-7
     # E_v = np.zeros([3, r_q.shape[0]], dtype=np.complex_)
 
     if near_field and tri_points is None:
@@ -614,20 +637,23 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     idx_list = list(idx_sequence)
 
     workhorse_partial = partial(E_parallel, E=E, Q=Q, r_sphere=r_sphere, r_q=r_q, r0=r0, theta=theta,
-                                m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N, near_field=near_field)
-    # for i in range(I):
-    #     for j in range(J):
-    #
-    #         xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
-    #         rs = np.array([xs, ys, np.zeros(xs.shape[0])])
-    #         r_v = rs[:, i]
-    #         grad_phi = np.zeros([3, N], dtype=np.complex_)
-    #         for n in range(N):
-    #             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-    #         E_complex = grad_phi.sum(axis=1) - (1j * omega * 4*np.pi*1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) * (np.cross(m, (r_v - r0)))
-    #         # E[i, j] = vnorm(E_complex.imag)
-    #         # E[i, j, 0, :] = E_complex.real
-    #         E[i, j] = vnorm(E_complex.imag)
+                                m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N, near_field=near_field,
+                                near_radius=near_radius, tri_points=tri_points)
+    for i in range(I):
+        for j in range(J):
+
+            xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
+            rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+            r_v = rs[:, i]
+            grad_phi = np.zeros([3, N], dtype=np.complex_)
+            grad_phi_near = np.zeros(N)
+            for n in range(N):
+                grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            E_complex = grad_phi.sum(axis=1) - (1j * omega * 4*np.pi*1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) *\
+                        (np.cross(m, (r_v - r0)))
+            # E[i, j] = vnorm(E_complex.imag)
+            # E[i, j, 0, :] = E_complex.real
+            E[i, j] = vnorm(E_complex.imag)
 
     # for i in range(I):
     #     for j in range(J):
@@ -660,8 +686,89 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
 # plt.show()
 
 def E_near(Q, p1, p2, p3, r):
+    """
+    This function is deprecated since the vector norms of E_n can't be summed like the vector-components can
+    Calculates the electric field norm of one charged triangular sheet
+    :param Q: Charge of the triangle
+    :param p1: point 1 of the triangle
+    :param p2: point 2 of the triangle
+    :param p3: point 3 of the triangle
+    :param r: vector where the electric field is evaluated
+    :return E: electric field norm at r
+    """
+    eps0 = 8.854187812813e-12
+    c = (1 / 3) * (p1 + p2 + p3)
+    A = np.linalg.norm(np.cross((p3 - p1), (p2 - p1))) / 2
+    n = np.cross((p3 - p1), (p2 - p3)) / (2 * A)
+    h = np.dot(n, (r - c))
+    p0 = r - h * n
+    r1, r2, r3 = np.linalg.norm(p1 - p0), np.linalg.norm(p2 - p0), np.linalg.norm(p3 - p0)
+    d1, d2, d3 = np.linalg.norm(p1 - r), np.linalg.norm(p2 - r), np.linalg.norm(p3 - r)
+    s12, s23, s31 = np.linalg.norm(p1 - p2), np.linalg.norm(p2 - p3), np.linalg.norm(p3 - p1)
+    D12, D23, D31 = np.dot(p1 - p0, p2 - p0), np.dot(p2 - p0, p3 - p0), np.dot(p3 - p0, p1 - p0)
+    c12, c23, c31 = np.dot(n, np.cross((p2 - p0), (p1 - p0))), np.dot(n, np.cross((p3 - p0), (p2 - p0))), \
+                    np.dot(n, np.cross((p1 - p0), (p3 - p0)))
+    D1 = h ** 2 * (r1 ** 2 + D23 - D12 - D31) - (c12 * c31)
+    D2 = h ** 2 * (r2 ** 2 + D31 - D23 - D12) - (c23 * c12)
+    D3 = h ** 2 * (r3 ** 2 + D12 - D31 - D23) - (c31 * c23)
+    N = -h * (c12 + c23 + c31)
 
-    return 0
+    k12x = np.array((0, p1[2] - p2[2], p2[1] - p1[1]))
+    k23x = np.array((0, p2[2] - p3[2], p3[1] - p2[1]))
+    k31x = np.array((0, p3[2] - p1[2], p1[1] - p3[1]))
+    k12y = np.array((p2[2] - p1[2], 0, p1[0] - p2[0]))
+    k23y = np.array((p3[2] - p2[2], 0, p2[0] - p3[0]))
+    k31y = np.array((p1[2] - p3[2], 0, p3[0] - p1[0]))
+    k12z = np.array((p1[1] - p2[1], p2[0] - p1[0], 0))
+    k23z = np.array((p2[1] - p3[1], p3[0] - p2[0], 0))
+    k31z = np.array((p3[1] - p1[1], p1[0] - p3[0], 0))
+    # f for x component
+    if s12 == 0 or s12 == d1 + d2:
+        f12x = 0
+    else:
+        f12x = np.dot(n, k12x)/s12*np.log((d1 + d2 + s12)/(d1 + d2 - s12))
+    if s23 == 0 or s23 == d2 + d3:
+        f23x = 0
+    else:
+        f23x = np.dot(n, k23x)/s23*np.log((d2 + d3 + s23)/(d2 + d3 - s23))
+    if s31 == 0 or s31 == d3 + d1:
+        f31x = 0
+    else:
+        f31x = np.dot(n, k31x)/s31*np.log((d3 + d1 + s31)/(d3 + d1 - s31))
+    # f for y component
+    if s12 == 0 or s12 == d1 + d2:
+        f12y = 0
+    else:
+        f12y = np.dot(n, k12y)/s12*np.log((d1 + d2 + s12)/(d1 + d2 - s12))
+    if s23 == 0 or s23 == d2 + d3:
+        f23y = 0
+    else:
+        f23y = np.dot(n, k23y)/s23*np.log((d2 + d3 + s23)/(d2 + d3 - s23))
+    if s31 == 0 or s31 == d3 + d1:
+        f31y = 0
+    else:
+        f31y = np.dot(n, k31y)/s31*np.log((d3 + d1 + s31)/(d3 + d1 - s31))
+    # f for z component
+    if s12 == 0 or s12 == d1 + d2:
+        f12z = 0
+    else:
+        f12z = np.dot(n, k12z)/s12*np.log((d1 + d2 + s12)/(d1 + d2 - s12))
+    if s23 == 0 or s23 == d2 + d3:
+        f23z = 0
+    else:
+        f23z = np.dot(n, k23z)/s23*np.log((d2 + d3 + s23)/(d2 + d3 - s23))
+    if s31 == 0 or s31 == d3 + d1:
+        f31z = 0
+    else:
+        f31z = np.dot(n, k31z)/s31*np.log((d3 + d1 + s31)/(d3 + d1 - s31))
+    # perpendicular components
+    if h == 0:
+        g = 0
+    else:
+        g = (n[0] + n[1] + n[2]) * (np.arctan2(D1, N*d1) + np.arctan2(D2, N*d2) + np.arctan2(D3, N*d3)
+                                    + 3*np.sign(h)*np.pi)
+    E = -Q/(A * 4*np.pi * eps0) * (f12x + f23x + f31x + f12y + f23y + f31y + f12z + f23z + f31z + g)
+    return E
 
 
 def compute_chunks(seq, num):
@@ -712,8 +819,8 @@ def compute_chunks(seq, num):
 
     return out
 
-def fibonacci_sphere_mesh(samples=1000):
 
+def fibonacci_sphere_mesh(samples=1000):
     points = []
     phi = math.pi * (3. - math.sqrt(5.))  # golden angle in radians
 

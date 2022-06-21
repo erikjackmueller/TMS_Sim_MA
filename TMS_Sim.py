@@ -9,10 +9,12 @@ import multiprocessing.managers
 
 # functions.plot_default()
 # path = os.path.realpath(Path("C:/Users/Besitzer/Downloads/Sphere_642"))
-path = "Sphere_10242"
-sizes = [10242, 1280]
-# path = "Sphere_642"
-# sizes = [642, 1280]
+# path = "Sphere_10242"
+# sizes = [10242, 1280]
+# path = "Sphere_2964"
+# sizes = [2964, 1280]
+path = "Sphere_642"
+sizes = [642, 1280]
 
 class MyManager(multiprocessing.managers.BaseManager):
     pass
@@ -21,7 +23,7 @@ man = MyManager()
 if __name__ == '__main__':
     # functions.plot_default()
     man.start()
-    n = 200
+    n = 100
     r_max = 0.9
     r = np.linspace(0.41, r_max, n)
     theta = np.linspace(0, np.pi, n)

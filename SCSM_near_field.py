@@ -16,7 +16,7 @@ man = MyManager()
 if __name__ == '__main__':
 
     man.start()
-    n = 200
+    n = 100
     r_max = 0.9
     r = np.linspace(0.41, r_max, n)
     theta = np.linspace(0, np.pi, n)
@@ -44,8 +44,9 @@ if __name__ == '__main__':
 
     start = time.time()
 
-    res = parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi, tri_points=tri_points)
-    # res = numba_SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
+    res_fine = parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi, near_field=True,
+                                      tri_points=tri_points, near_radius=0.5)
+    res = numba_SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end
@@ -62,5 +63,6 @@ if __name__ == '__main__':
     print(rerror_imag)
 
     plot_E_diff(res1, res2, r, theta, r_max, r0, m)
-    plot_E(relative_diff, r, theta, r_max)
+    plot_E_diff(res1, res_fine, r, theta, r_max, r0, m)
+    plot_E_diff(res2, res_fine, r, theta, r_max, r0, m)
 
