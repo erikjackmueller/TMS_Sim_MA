@@ -5,6 +5,7 @@ from functools import partial
 # from mpl_toolkits import mplot3d
 from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import numba
 import math
 import os
@@ -166,25 +167,43 @@ def vangle(x1, x2):
     return np.arccos(np.dot(u_x1, u_x2))
 
 
-def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([0, -1, 0]), phi=0 * np.pi, omega=1):
+def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([0, -1, 0]), phi=0 * np.pi, omega=1,
+                        projection="polar"):
     mu0 = 4 * np.pi * 1e-7
-    E = np.zeros([r_sphere.shape[0], theta.shape[0]])
     r0 = vnorm(r0_v)
-    for i_theta in range(theta.shape[0]):
-        # xs, ys, zs = r_sphere*np.sin(theta[i_theta]) * np.cos(phi),\
-        #              r_sphere*np.sin(theta[i_theta]) * np.sin(phi), r_sphere*np.cos(phi)
-        # rs = np.array([xs, ys, zs]) # r is now in carthesian coordinates!
-        xs, ys = r_sphere * np.cos(theta[i_theta]), r_sphere * np.sin(theta[i_theta])
-        rs = np.array([xs, ys, np.zeros(xs.shape[0])])
-        for i_r in range(r_sphere.shape[0]):
-            r_v = rs[:, i_r]
-            a_v = r0_v - r_v
-            a = vnorm(a_v)
-            F = (r0 * a + np.dot(r0_v, a_v)) * a
-            nab_F = ((a ** 2 / r0 ** 2) + 2 * a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r0_v - (
+    if projection == "polar":
+        E = np.zeros([r_sphere.shape[0], theta.shape[0]])
+        for i_theta in range(theta.shape[0]):
+            for i_r in range(r_sphere.shape[0]):
+
+                    xs, ys = r_sphere * np.cos(theta[i_theta]), r_sphere * np.sin(theta[i_theta]) # r is now in carthesian coordinates!
+                    rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+                    r_v = rs[:, i_r]
+
+                    a_v = r0_v - r_v
+                    a = vnorm(a_v)
+                    F = (r0 * a + np.dot(r0_v, a_v)) * a
+                    nab_F = ((a ** 2 / r0 ** 2) + 2 * a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r0_v - (
+                                a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r_v
+                    E_v = omega * mu0 / (4 * np.pi * F ** 2) * (F * np.cross(r_v, m) - np.dot(m, nab_F) * np.cross(r_v, r0_v))
+                    E[i_r, i_theta] = vnorm(E_v)
+    elif projection == "sphere_surface":
+        E = np.zeros([phi.shape[0], theta.shape[0]])
+        for i_phi in range(phi.shape[0]):
+            for i_theta in range(theta.shape[0]):
+                x, y, z = r_sphere * np.cos(phi[i_phi]) * np.sin(theta[i_theta]), r_sphere * np.sin(phi[i_phi]) *\
+                          np.sin(theta[i_theta]), r_sphere * np.cos(theta[i_theta])
+                r_v = np.array([x, y, z])
+                a_v = r0_v - r_v
+                a = vnorm(a_v)
+                F = (r0 * a + np.dot(r0_v, a_v)) * a
+                nab_F = ((a ** 2 / r0 ** 2) + 2 * a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r0_v - (
                         a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r_v
-            E_v = omega * mu0 / (4 * np.pi * F ** 2) * (F * np.cross(r_v, m) - np.dot(m, nab_F) * np.cross(r_v, r0_v))
-            E[i_r, i_theta] = vnorm(E_v)
+                E_v = omega * mu0 / (4 * np.pi * F ** 2) * (
+                            F * np.cross(r_v, m) - np.dot(m, nab_F) * np.cross(r_v, r0_v))
+                E[i_phi, i_theta] = vnorm(E_v)
+    else:
+        raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
     return E
 
 
@@ -382,7 +401,23 @@ def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     plt.show()
 
 
-# plot_default()
+def plot_E_sphere_surf(res, phi, theta, r):
+    p, t = np.meshgrid(phi, theta)
+    x = np.cos(p) * np.sin(t)
+    y = np.sin(p) * np.sin(t)
+    z = np.cos(t)
+    fcolors = res
+    fmax, fmin = fcolors.max(), fcolors.min()
+    fcolors = (fcolors - fmin) / (fmax - fmin)
+    fig = plt.figure(figsize=plt.figaspect(1.))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=cm.plasma(fcolors))
+    # ax.grid()
+    m = cm.ScalarMappable(cmap=cm.plasma)
+    fig.colorbar(m, shrink=0.5, pad=0.15)
+    plt.show()
+
+
 def sphere_to_carthesian(r, theta, phi):
     return r * np.sin(theta) * np.cos(phi), r * np.sin(theta) * np.sin(phi), r * np.cos(theta)
 
@@ -595,13 +630,22 @@ def SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0
     return E
 
 
-def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N, near_field, tri_points, near_radius):
+def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N, projection, near_field, tri_points,
+               near_radius):
     for k in range(len(idxs)):
         i = idxs[k][0]
         j = idxs[k][1]
-        xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
-        rs = np.array([xs, ys, np.zeros(xs.shape[0])])
-        r_v = rs[:, i]
+        if projection == "polar":
+            xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
+            rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+            r_v = rs[:, i]
+        elif projection == "sphere_surface":
+            x, y, z = r_sphere * np.cos(phi[i]) * np.sin(theta[j]), r_sphere * np.sin(phi[i]) * np.sin(theta[j]),\
+                      r_sphere * np.cos(theta[j])
+            r_v = np.array([x, y, z])
+        else:
+            raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
+
         grad_phi = np.zeros([3, N], dtype=np.complex_)
         for n in range(N):
             if near_field:
@@ -618,7 +662,8 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
 
 
 def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]),
-                           phi=0, omega=1, near_field=False, tri_points=None, near_radius=0.1):
+                           projection="polar", phi=np.zeros((10, 10)), omega=1, near_field=False, tri_points=None,
+                           near_radius=0.1):
     eps0 = 8.854187812813e-12
     mu0 = 4 * np.pi * 1e-7
     # E_v = np.zeros([3, r_q.shape[0]], dtype=np.complex_)
@@ -627,7 +672,12 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
         raise ValueError("near_field approximation specified, but no valid triangle points were given!")
 
     # manager.start()
-    I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
+    if projection == "polar":
+        I, J, N = r_sphere.shape[0], theta.shape[0], r_q.shape[0]
+    elif projection == "sphere_surface":
+        I, J, N = phi.shape[0], theta.shape[0], r_q.shape[0]
+    else:
+        raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
     E = manager.np_zeros([I, J])
     # n_cpu = 5
     n_cpu = multiprocessing.cpu_count()
@@ -637,23 +687,23 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     idx_list = list(idx_sequence)
 
     workhorse_partial = partial(E_parallel, E=E, Q=Q, r_sphere=r_sphere, r_q=r_q, r0=r0, theta=theta,
-                                m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N, near_field=near_field,
-                                near_radius=near_radius, tri_points=tri_points)
-    for i in range(I):
-        for j in range(J):
-
-            xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
-            rs = np.array([xs, ys, np.zeros(xs.shape[0])])
-            r_v = rs[:, i]
-            grad_phi = np.zeros([3, N], dtype=np.complex_)
-            grad_phi_near = np.zeros(N)
-            for n in range(N):
-                grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-            E_complex = grad_phi.sum(axis=1) - (1j * omega * 4*np.pi*1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) *\
-                        (np.cross(m, (r_v - r0)))
-            # E[i, j] = vnorm(E_complex.imag)
-            # E[i, j, 0, :] = E_complex.real
-            E[i, j] = vnorm(E_complex.imag)
+                                m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N, projection=projection,
+                                near_field=near_field, near_radius=near_radius, tri_points=tri_points)
+    # for i in range(I):
+    #     for j in range(J):
+    #
+    #         xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
+    #         rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+    #         r_v = rs[:, i]
+    #         grad_phi = np.zeros([3, N], dtype=np.complex_)
+    #         grad_phi_near = np.zeros(N)
+    #         for n in range(N):
+    #             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+    #         E_complex = grad_phi.sum(axis=1) - (1j * omega * 4*np.pi*1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) *\
+    #                     (np.cross(m, (r_v - r0)))
+    #         # E[i, j] = vnorm(E_complex.imag)
+    #         # E[i, j, 0, :] = E_complex.real
+    #         E[i, j] = vnorm(E_complex.imag)
 
     # for i in range(I):
     #     for j in range(J):
