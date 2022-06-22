@@ -11,10 +11,10 @@ import multiprocessing.managers
 # path = os.path.realpath(Path("C:/Users/Besitzer/Downloads/Sphere_642"))
 # path = "Sphere_10242"
 # sizes = [10242, 1280]
-path = "Sphere_2964"
-sizes = [2964, 1280]
-# path = "Sphere_642"
-# sizes = [642, 1280]
+# path = "Sphere_2964"
+# sizes = [2964, 1280]
+path = "Sphere_642"
+sizes = [642, 1280]
 
 class MyManager(multiprocessing.managers.BaseManager):
     pass
@@ -24,12 +24,13 @@ if __name__ == '__main__':
     # functions.plot_default()
     man.start()
     n = 100
-    r_max = 0.9
-    r = np.linspace(0.41, r_max, n)
+    scaling_factor = 0.1
+    r_max = 0.9 * scaling_factor
+    r = np.linspace(0.41 * scaling_factor, r_max, n)
     theta = np.linspace(0, np.pi, n)
     phi = (1/2)*np.pi
     # r0 = np.array([0, 1.05, 0])
-    r0 = 1.05*np.array([0, 1, 0])
+    r0 = 1.05*np.array([0, 1, 0]) * scaling_factor
     m = np.array([-1, 0, 0])
 
     start = time.time()
@@ -40,7 +41,7 @@ if __name__ == '__main__':
 
     start = time.time()
     # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-    tc, areas = functions.read_sphere_mesh_from_txt_locations_only(sizes, path)
+    tc, areas = functions.read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
     # functions.triangulateSphere(20)
     end = time.time()
     print(f"{end - start:.2f}s triangulation")
@@ -55,7 +56,7 @@ if __name__ == '__main__':
 
     # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
-    res = functions.numba_SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
+    res = functions.SCSM_E_sphere_numba(Q, rs, r, theta, r0=r0, m=m)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end
@@ -66,16 +67,15 @@ if __name__ == '__main__':
     diff = np.abs(res1 - res2)
     relative_diff = diff / np.linalg.norm(res1)
 
-    rerror_imag = np.linalg.norm(diff) / np.linalg.norm(res1)
+    rerror_imag = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
 
-    print("relative error:")
-    print(rerror_imag)
+    print(f"relative error: {rerror_imag:.7f}%")
     # print(res1[0, 0])
     # functions.plot_E(res2, r, theta, r_max)
     # functions.plot_E(res2, r, theta, r_max)
     # functions.plot_E(diff_to_imag, r, theta, r_max)
     functions.plot_E_diff(res1, res2, r, theta, r_max, r0, m)
-    functions.plot_E(relative_diff, r, theta, r_max)
+    # functions.plot_E(relative_diff, r, theta, r_max)
     # plt.savefig("sample" + ".png")
     # functions.plot_E_diff(res2, res3, r, theta, r_max, r0, m)
     # functions.plot_E(res4, r, theta, r_max)

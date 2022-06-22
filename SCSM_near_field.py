@@ -44,9 +44,9 @@ if __name__ == '__main__':
 
     start = time.time()
 
-    res_fine = parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi, near_field=True,
-                                      tri_points=tri_points, near_radius=0.5)
-    res = numba_SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
+    # res_fine = parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi, near_field=True,
+    #                                   tri_points=tri_points, near_radius=0.5)
+    res = SCSM_E_sphere_numba(Q, rs, r, theta, r0=r0, m=m)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end

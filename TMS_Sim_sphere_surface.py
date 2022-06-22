@@ -24,12 +24,13 @@ if __name__ == '__main__':
     # functions.plot_default()
     man.start()
     n = 100
-    r_max = 0.9
-    r = 0.8
+    scaling_factor = 1
+    r_max = 0.9 * scaling_factor
+    r = 0.85 * scaling_factor
     theta = np.linspace(0, 2*np.pi, n)
     phi = np.linspace(0, np.pi, n)
     # r0 = np.array([0, 1.05, 0])
-    r0 = 1.05*np.array([1, 0, 0])
+    r0 = 1.05*np.array([1, 0, 0]) * scaling_factor
     m = np.array([-1, 0, 0])
 
     start = time.time()
@@ -40,7 +41,7 @@ if __name__ == '__main__':
 
     start = time.time()
     # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-    tc, areas = functions.read_sphere_mesh_from_txt_locations_only(sizes, path)
+    tc, areas = functions.read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
     # functions.triangulateSphere(20)
     end = time.time()
     print(f"{end - start:.2f}s triangulation")
@@ -53,9 +54,9 @@ if __name__ == '__main__':
 
     start = time.time()
 
-    res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta=theta, phi=phi, r0=r0, m=m, projection="sphere_surface")
+    # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta=theta, phi=phi, r0=r0, m=m, projection="sphere_surface")
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
-    # res = functions.numba_SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
+    res = functions.SCSM_E_sphere_numba_surf(Q, rs, r, theta, r0=r0, m=m, phi=phi)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end
@@ -66,13 +67,13 @@ if __name__ == '__main__':
     diff = np.abs(res1 - res2)
     relative_diff = diff / np.linalg.norm(res1)
     #
-    rerror_imag = np.linalg.norm(diff) / np.linalg.norm(res1)
+    rerror_imag = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
 
-    print("relative error:")
-    print(rerror_imag)
+    print(f"relative error: {rerror_imag:.7f}%")
+
     functions.plot_E_sphere_surf(res1, phi, theta, r)
-    functions.plot_E_sphere_surf(res2, phi, theta, r)
-    functions.plot_E_sphere_surf(diff, phi, theta, r)
+    # functions.plot_E_sphere_surf(res2, phi, theta, r)
+    # functions.plot_E_sphere_surf(diff, phi, theta, r)
     # functions.plot_E_sphere_surf(relative_diff, phi, theta, r)
 
 

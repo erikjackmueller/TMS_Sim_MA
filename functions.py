@@ -53,7 +53,7 @@ def read_sphere_mesh_from_txt(sizes, path):
     return trangle_centers, areas
 
 
-def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False):
+def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False, scaling=1):
     """
     The locations from a .txt file are triangulated using Delaunay algorithm
     for that to work the 3D carthesian locations are converted to spherical coordinates
@@ -69,6 +69,7 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False):
 
     for i in range(3):
         locations[i, :] = np.genfromtxt(os.path.join(path, files[i] + ".txt"), dtype=float)
+    locations = scaling * locations
     sphere_surf_locations = carthesian_to_sphere(locations.T)[:, 1:]
     # idx [:, 1:] leaves out r which is constant if all is right
     tri = Delaunay(sphere_surf_locations)
@@ -96,7 +97,6 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False):
         line1_2 = p2 - p1
         line1_3 = p3 - p1
         areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
-
     # plot_mesh(locations, connections, 0, 1200, centers=triangle_centers)
     # ax1 = plt.axes(projection='3d')
     # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
@@ -373,21 +373,25 @@ def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     im1 = ax0.pcolormesh(theta, r, res1, cmap='plasma', vmin=res1.min(), vmax=res1.max())
     fig.colorbar(im1, ax=ax0)
     ax0.set_yticklabels([])
-    ax0.set_rmax(r_max)
+    ax0.set_ylim(0, r_max)
+    # ax0.set_yticks(np.arange(0, r_max, r_max / 10))
     ax0.grid(True)
     f_max = max(res1.max(), res2.max())
     f_min = min(res1.min(), res2.min())
     im = ax1.pcolormesh(theta, r, res1, cmap='plasma', vmin=f_min, vmax=f_max)
     ax1.set_yticklabels([])
-    ax1.set_rmax(r_max)
+    ax1.set_ylim(0, r_max)
+    # ax1.set_yticks(np.arange(0, r_max, r_max/10))
     ax1.grid(True)
     im = ax2.pcolormesh(theta, r, res2, cmap='plasma', vmin=f_min, vmax=f_max)
     ax2.set_yticklabels([])
-    ax2.set_rmax(r_max)
+    ax2.set_ylim(0, r_max)
+    # ax2.set_yticks(np.arange(0, r_max, r_max / 10))
     ax2.grid(True)
     im = ax3.pcolormesh(theta, r, diff, cmap='plasma', vmin=f_min, vmax=f_max)
     ax3.set_yticklabels([])
-    ax3.set_rmax(r_max)
+    ax3.set_ylim(0, r_max)
+    # ax3.set_yticks(np.arange(0, r_max, r_max / 10))
     ax3.grid(True)
     fig.colorbar(im)
     ax0.set_title("analytic (original scale)")
@@ -574,8 +578,58 @@ def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.
 
 
 @numba.jit(nopython=True, parallel=True)
-def numba_SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1,
-                        near_field=False):
+def SCSM_E_sphere_numba(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1,
+                        phi=np.zeros((10, 10)), near_field=False, projection="polar"):
+    eps0 = 8.854187812813e-12
+    if projection == "polar":
+        I = r_sphere.shape[0]
+        J = theta.shape[0]
+    elif projection == "sphere_surface":
+        I = phi.shape[0]
+        J = theta.shape[0]
+    else:
+        raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
+    N = r_q.shape[0]
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    if projection == "polar":
+        E = np.zeros((r_sphere.shape[0], theta.shape[0]))
+        for i in numba.prange(I):
+            for j in numba.prange(J):
+                xs = r_sphere * np.cos(theta[j])
+                ys = r_sphere * np.sin(theta[j])
+                zs = np.zeros(xs.shape[0])
+                rs = np.vstack((xs, ys, zs)).T
+                r_v = rs[i]
+                grad_phi = np.zeros((3, N), dtype=np.complex_)
+                for n in numba.prange(N):
+                    grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+                E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+                        vnorm(r_v - r0) ** 3)
+                E[i, j] = vnorm(E_complex.imag)
+    if projection == "sphere_surface":
+        E = np.zeros((phi.shape[0], theta.shape[0]))
+        for i in numba.prange(I):
+            for j in numba.prange(J):
+                xs = r_sphere * np.cos(phi[i]) * np.sin(theta[j])
+                ys = r_sphere * np.sin(phi[i]) * np.sin(theta[j])
+                zs = r_sphere * np.cos(theta[j])
+                rs = np.vstack((xs, ys, zs)).T
+                r_v = rs[i]
+                grad_phi = np.zeros((3, N), dtype=np.complex_)
+                for n in numba.prange(N):
+                    grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+                E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+                        vnorm(r_v - r0) ** 3)
+                E[i, j] = vnorm(E_complex.imag)
+
+    return E
+
+@numba.jit(nopython=True, parallel=True)
+def SCSM_E_sphere_numba_polar(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1,
+                        phi=np.zeros((10, 10)), near_field=False, projection="polar"):
     eps0 = 8.854187812813e-12
     I = r_sphere.shape[0]
     J = theta.shape[0]
@@ -587,12 +641,39 @@ def numba_SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.ar
 
     for i in numba.prange(I):
         for j in numba.prange(J):
-
             xs = r_sphere * np.cos(theta[j])
             ys = r_sphere * np.sin(theta[j])
             zs = np.zeros(xs.shape[0])
             rs = np.vstack((xs, ys, zs)).T
             r_v = rs[i]
+            grad_phi = np.zeros((3, N), dtype=np.complex_)
+            for n in numba.prange(N):
+                grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+                    vnorm(r_v - r0) ** 3)
+            E[i, j] = vnorm(E_complex.imag)
+
+    return E
+
+@numba.jit(nopython=True, parallel=True)
+def SCSM_E_sphere_numba_surf(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1,
+                        phi=np.zeros((10, 10)), near_field=False):
+    eps0 = 8.854187812813e-12
+    I = phi.shape[0]
+    J = theta.shape[0]
+    N = r_q.shape[0]
+    E = np.zeros((phi.shape[0], theta.shape[0]))
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    for i in numba.prange(I):
+        # phi_i = phi[i]
+        for j in numba.prange(J):
+            x = r_sphere * np.cos(phi[i]) * np.sin(theta[j])
+            y = r_sphere * np.sin(phi[i]) * np.sin(theta[j])
+            z = r_sphere * np.cos(theta[j])
+            r_v = np.array((x, y, z))
             grad_phi = np.zeros((3, N), dtype=np.complex_)
             for n in numba.prange(N):
                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
@@ -692,17 +773,29 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     # for i in range(I):
     #     for j in range(J):
     #
-    #         xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
-    #         rs = np.array([xs, ys, np.zeros(xs.shape[0])])
-    #         r_v = rs[:, i]
+    #         if projection == "polar":
+    #             xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
+    #             rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+    #             r_v = rs[:, i]
+    #         elif projection == "sphere_surface":
+    #             x, y, z = r_sphere * np.cos(phi[i]) * np.sin(theta[j]), r_sphere * np.sin(phi[i]) * np.sin(theta[j]),\
+    #                       r_sphere * np.cos(theta[j])
+    #             r_v = np.array([x, y, z])
+    #         else:
+    #             raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
+    #
     #         grad_phi = np.zeros([3, N], dtype=np.complex_)
-    #         grad_phi_near = np.zeros(N)
     #         for n in range(N):
-    #             grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-    #         E_complex = grad_phi.sum(axis=1) - (1j * omega * 4*np.pi*1e-7) / (4 * np.pi * vnorm(r_v - r0) ** 3) *\
-    #                     (np.cross(m, (r_v - r0)))
-    #         # E[i, j] = vnorm(E_complex.imag)
-    #         # E[i, j, 0, :] = E_complex.real
+    #             if near_field:
+    #                 eps_r = vnorm(r_q[n] - r_v)
+    #                 if eps_r < near_radius:
+    #                     grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
+    #                 else:
+    #                     grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+    #             else:
+    #                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+    #         E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+    #                     vnorm(r_v - r0) ** 3)
     #         E[i, j] = vnorm(E_complex.imag)
 
     # for i in range(I):
