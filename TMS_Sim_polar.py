@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
-    res = functions.SCSM_E_sphere_numba(Q, rs, r, theta, r0=r0, m=m)
+    res = functions.SCSM_E_sphere_numba_polar(Q, rs, r, theta, r0=r0, m=m)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end
