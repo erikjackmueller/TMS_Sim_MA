@@ -1,3 +1,5 @@
+from typing import Union, Any
+
 import numpy as np
 from scipy.special import legendre
 from itertools import product
@@ -191,8 +193,10 @@ def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([
         E = np.zeros([phi.shape[0], theta.shape[0]])
         for i_phi in range(phi.shape[0]):
             for i_theta in range(theta.shape[0]):
-                x, y, z = r_sphere * np.cos(phi[i_phi]) * np.sin(theta[i_theta]), r_sphere * np.sin(phi[i_phi]) *\
-                          np.sin(theta[i_theta]), r_sphere * np.cos(theta[i_theta])
+                phi_i = phi[i_phi, 0]
+                theta_j = theta[0, i_theta]
+                x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j),\
+                          r_sphere * np.cos(phi_i)
                 r_v = np.array([x, y, z])
                 a_v = r0_v - r_v
                 a = vnorm(a_v)
@@ -670,9 +674,11 @@ def SCSM_E_sphere_numba_surf(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=
     for i in numba.prange(I):
         # phi_i = phi[i]
         for j in numba.prange(J):
-            x = r_sphere * np.cos(phi[i]) * np.sin(theta[j])
-            y = r_sphere * np.sin(phi[i]) * np.sin(theta[j])
-            z = r_sphere * np.cos(theta[j])
+            phi_i = phi.T[0][i]
+            theta_j = theta[0][j]
+            x = r_sphere * np.sin(phi_i) * np.cos(theta_j)
+            y = r_sphere * np.sin(phi_i) * np.sin(theta_j)
+            z = r_sphere * np.cos(phi_i)
             r_v = np.array((x, y, z))
             grad_phi = np.zeros((3, N), dtype=np.complex_)
             for n in numba.prange(N):
@@ -721,8 +727,10 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
             rs = np.array([xs, ys, np.zeros(xs.shape[0])])
             r_v = rs[:, i]
         elif projection == "sphere_surface":
-            x, y, z = r_sphere * np.cos(phi[i]) * np.sin(theta[j]), r_sphere * np.sin(phi[i]) * np.sin(theta[j]),\
-                      r_sphere * np.cos(theta[j])
+            phi_i = phi[i, 0]
+            theta_j = theta[0, j]
+            x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j), \
+                      r_sphere * np.cos(phi_i)
             r_v = np.array([x, y, z])
         else:
             raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
@@ -730,11 +738,11 @@ def E_parallel(idxs, E, Q, r_sphere, r_q, r0, theta, m, phi, omega, eps0, mu0, N
         grad_phi = np.zeros([3, N], dtype=np.complex_)
         for n in range(N):
             if near_field:
-                eps_r = vnorm(r_q[n] - r_v)
-                if eps_r < near_radius:
-                    grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
-                else:
-                    grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+                # eps_r = vnorm(r_q[n] - r_v)
+                # if eps_r < near_radius:
+                grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
+                # else:
+                #     grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
             else:
                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
         E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
@@ -787,11 +795,10 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     #         grad_phi = np.zeros([3, N], dtype=np.complex_)
     #         for n in range(N):
     #             if near_field:
-    #                 eps_r = vnorm(r_q[n] - r_v)
-    #                 if eps_r < near_radius:
+    #                 if near_field:
+    #                     # eps_r = vnorm(r_q[n] - r_v)
+    #                     # if eps_r < near_radius:
     #                     grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
-    #                 else:
-    #                     grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
     #             else:
     #                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
     #         E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
@@ -830,7 +837,6 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
 
 def E_near(Q, p1, p2, p3, r):
     """
-    This function is deprecated since the vector norms of E_n can't be summed like the vector-components can
     Calculates the electric field norm of one charged triangular sheet
     :param Q: Charge of the triangle
     :param p1: point 1 of the triangle
@@ -844,10 +850,10 @@ def E_near(Q, p1, p2, p3, r):
     A = np.linalg.norm(np.cross((p3 - p1), (p2 - p1))) / 2
     n = np.cross((p3 - p1), (p2 - p3)) / (2 * A)
     h = np.dot(n, (r - c))
-    p0 = r - h * n
+    p0 = r - (h * n)
     r1, r2, r3 = np.linalg.norm(p1 - p0), np.linalg.norm(p2 - p0), np.linalg.norm(p3 - p0)
     d1, d2, d3 = np.linalg.norm(p1 - r), np.linalg.norm(p2 - r), np.linalg.norm(p3 - r)
-    s12, s23, s31 = np.linalg.norm(p1 - p2), np.linalg.norm(p2 - p3), np.linalg.norm(p3 - p1)
+    s12, s23, s31 = np.linalg.norm(p2 - p1), np.linalg.norm(p3 - p2), np.linalg.norm(p1 - p3)
     D12, D23, D31 = np.dot(p1 - p0, p2 - p0), np.dot(p2 - p0, p3 - p0), np.dot(p3 - p0, p1 - p0)
     c12, c23, c31 = np.dot(n, np.cross((p2 - p0), (p1 - p0))), np.dot(n, np.cross((p3 - p0), (p2 - p0))), \
                     np.dot(n, np.cross((p1 - p0), (p3 - p0)))
@@ -905,12 +911,17 @@ def E_near(Q, p1, p2, p3, r):
     else:
         f31z = np.dot(n, k31z)/s31*np.log((d3 + d1 + s31)/(d3 + d1 - s31))
     # perpendicular components
-    if h == 0:
-        g = 0
-    else:
-        g = (n[0] + n[1] + n[2]) * (np.arctan2(D1, N*d1) + np.arctan2(D2, N*d2) + np.arctan2(D3, N*d3)
-                                    + 3*np.sign(h)*np.pi)
-    E = -Q/(A * 4*np.pi * eps0) * (f12x + f23x + f31x + f12y + f23y + f31y + f12z + f23z + f31z + g)
+    arc_tangent_sum = np.arctan2(D1, N * d1) + np.arctan2(D2, N * d2) + np.arctan2(D3, N * d3) + np.sign(h) * np.pi
+    arc_tangent_sum = np.arctan(D1 / (N * d1)) + np.arctan(D2 / (N * d2)) + np.arctan(D3 / (N * d3)) + np.sign(h) * np.pi/2
+    gx = - n[0] * arc_tangent_sum
+    gy = - n[1] * arc_tangent_sum
+    gz = - n[2] * arc_tangent_sum
+
+    Ex = f12x + f23x + f31x + gx
+    Ey = f12y + f23y + f31y + gy
+    Ez = f12z + f23z + f31z + gz
+
+    E = -Q/(A * 4*np.pi * eps0) * np.array((Ex, Ey, Ez))
     return E
 
 

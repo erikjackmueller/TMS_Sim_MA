@@ -44,9 +44,9 @@ if __name__ == '__main__':
 
     start = time.time()
 
-    # res_fine = parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi, near_field=True,
-    #                                   tri_points=tri_points, near_radius=0.5)
-    res = SCSM_E_sphere_numba(Q, rs, r, theta, r0=r0, m=m)
+    res_fine = parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi, near_field=True,
+                                      tri_points=tri_points, near_radius=0.5)
+    res = SCSM_E_sphere_numba_polar(Q, rs, r, theta, r0=r0, m=m)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end
@@ -55,12 +55,14 @@ if __name__ == '__main__':
     res2 = res.copy()
 
     diff = np.abs(res1 - res2)
+    dif2 = np.abs(res1 - res_fine)
     relative_diff = diff / np.linalg.norm(res1)
+    #
+    rerror_imag = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
+    rerror_fine = np.linalg.norm(dif2) * 100 / np.linalg.norm(res1)
 
-    rerror_imag = np.linalg.norm(diff) / np.linalg.norm(res1)
-
-    print("relative error:")
-    print(rerror_imag)
+    print(f"relative error no near field: {rerror_imag:.7f}%")
+    print(f"relative error with near field: {rerror_fine:.7f}%")
 
     plot_E_diff(res1, res2, r, theta, r_max, r0, m)
     plot_E_diff(res1, res_fine, r, theta, r_max, r0, m)
