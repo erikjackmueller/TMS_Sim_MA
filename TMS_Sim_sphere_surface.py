@@ -29,7 +29,8 @@ if __name__ == '__main__':
     r = 0.85 * scaling_factor
     phi, theta = np.mgrid[0.0:r*np.pi:100j, 0.0:r*np.pi:100j]
     # r0 = np.array([0, 1.05, 0])
-    r0 = 1.05*np.array([1, 0, 0]) * scaling_factor
+    r0 = 1.05*np.array([0.7, -0.7, 0]) * scaling_factor
+    # r0 = 1.05 * np.array([1, 0, 0]) * scaling_factor
     m = np.array([-1, 0, 0])
 
     start = time.time()
@@ -70,7 +71,8 @@ if __name__ == '__main__':
 
     print(f"relative error: {rerror_imag:.7f}%")
 
-    functions.plot_E_sphere_surf(res1, phi, theta, r)
+    # functions.plot_E_sphere_surf(res1, phi, theta, r)
+    functions.plot_E_sphere_surf_diff(res1, res2, phi, theta, r)
     # functions.plot_E_sphere_surf(res2, phi, theta, r)
     # functions.plot_E_sphere_surf(diff, phi, theta, r)
     # functions.plot_E_sphere_surf(relative_diff, phi, theta, r)

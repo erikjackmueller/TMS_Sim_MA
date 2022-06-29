@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
     man.start()
     n = 100
-    r_max = 0.9
+    r_max = 0.93
     r = np.linspace(0.41, r_max, n)
     theta = np.linspace(0, np.pi, n)
     phi = (1/2)*np.pi
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     print(f"{end - start:.2f}s triangulation")
 
     start = time.time()
-    Q, rs = SCSM_tri_sphere_numba(tc, areas, r0=r0, m=m)
+    Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
     end = time.time()
     print(f"{end - start:.2f}s  Q calculation")
 

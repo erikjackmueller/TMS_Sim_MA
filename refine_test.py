@@ -219,13 +219,14 @@ def refine(idxs, tris, points, tc):
                                                                       idxs_refined)
 
     return tris, points, tc, idxs_refined
-triangles, points, tc, idxs_refined = refine([0, 9, 11], tri.simplices, points, tc)
-triangles, points, tc, idxs_refined = refine(idxs_refined, triangles, points, tc)
+triangles, points, tc, idxs_refined = refine([11], tri.simplices, points, tc)
+# triangles, points, tc, idxs_refined = refine(idxs_refined, triangles, points, tc)
 # triangles, points, tc, idxs_refined = refine([0, 5], tri.simplices, points, tc)
 # triangles, points, tc, idxs_refined = refine(idxs_refined, triangles, points, tc)
 # triangles, points, tc, idxs_refined = refine(idxs_refined, triangles, points, tc)
 # triangles, points = refine(idxs_refined, triangles, points, tc)[:2]
 
+# triangles = tri.simplices
 plt.triplot(points[:, 0], points[:, 1], triangles)
 plt.plot(points[:, 0], points[:, 1], 'o')
 plt.show()

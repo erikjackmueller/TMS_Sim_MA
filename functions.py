@@ -8,6 +8,7 @@ from functools import partial
 from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
 from matplotlib import cm
+import h5py
 import numba
 import math
 import os
@@ -107,6 +108,48 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False, scal
     else:
         return triangle_centers, areas
 
+def read_mesh_from_hdf5(fn):
+    with h5py.File(fn, "r") as f:
+        a_group_key = list(f.keys())[0]
+        key_list = list(f.keys())
+
+        mesh_data = f['mesh']
+        elm_number = np.array(f['mesh']['elm']['elm_number'])
+        elm_type = np.array(f['mesh']['elm']['elm_type'])
+        node_number_list = np.array(f['mesh']['elm']['node_number_list'])
+        tri_tissue_type = np.array(f['mesh']['elm']['tri_tissue_type'])
+        triangle_number_list = np.array(f['mesh']['elm']['triangle_number_list'])
+        node_number = np.array(f['mesh']['nodes']['node_number'])
+        node_coords = np.array(f['mesh']['nodes']['node_coord'])
+
+    elms_wm = elm_number[np.where(elm_type == 2)]
+    tris_wm = triangle_number_list[np.where(elm_type == 2)]
+    n = tris_wm.shape[0]
+    triangle_centers = np.zeros([n, 3])
+    areas = np.zeros(n)
+
+    # calculate centerpoints of trinagles from connections and vertexes
+    # center is (AB + BC + CA) / 3 starting from A
+    # for a flat trangle in space that should be (x1 + x2 + x3)/3, (y1 + y2 + y3)/3, (z1 + z2 + z3)/3
+    # for the area the formula is S = 1/2|AB x AC|, x is the crossproduct in this case
+
+    triangle_points = np.zeros((n, 3, 3))
+    for i in range(n):
+        p1 = node_coords[int(tris_wm[i, 0]), :]
+        p2 = node_coords[int(tris_wm[i, 1]), :]
+        p3 = node_coords[int(tris_wm[i, 2]), :]
+        triangle_points[i][:][:] = np.vstack((p1, p2, p3))
+        p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
+        p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
+        p_c_3 = (p1[2] + p2[2] + p3[2]) / 3
+        triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
+        line1_2 = p2 - p1
+        line1_3 = p3 - p1
+        areas[i] = 0.5 * np.linalg.norm(np.cross(line1_2, line1_3))
+    plot_mesh(node_coords.T, tris_wm.T, 0, n, centers=triangle_centers)
+    # ax1 = plt.axes(projection='3d')
+    # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
+    return triangle_centers, areas
 
 def plot_mesh(locations, connections, n1, n2, centers=None):
     fig = plt.figure()
@@ -425,6 +468,34 @@ def plot_E_sphere_surf(res, phi, theta, r):
     fig.colorbar(m, shrink=0.5, pad=0.15)
     plt.show()
 
+def plot_E_sphere_surf_diff(res1, res2, phi, theta, r):
+    diff = np.abs(res2 - res1)
+    fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(12, 4))
+    ax1, ax2, ax3 = ax[0], ax[1], ax[2]
+    p, t = np.meshgrid(phi, theta)
+    x = np.cos(p) * np.sin(t)
+    y = np.sin(p) * np.sin(t)
+    z = np.cos(t)
+    fcolors1 = res1
+    fmax, fmin = fcolors1.max(), fcolors1.min()
+    fcolors1 = (fcolors1 - fmin) / (fmax - fmin)
+    fcolors2 = res2
+    fcolors2 = (fcolors2 - fmin) / (fmax - fmin)
+    fcolorsdiff = diff
+    fcolorsdiff = (fcolorsdiff - fmin) / (fmax - fmin)
+
+    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=cm.plasma(fcolors1))
+    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=cm.plasma(fcolors2))
+    ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=cm.plasma(fcolorsdiff))
+
+    ax1.set_title("analytic")
+    ax2.set_title("numeric")
+    ax3.set_title("difference")
+    # ax.grid()
+    m = cm.ScalarMappable(cmap=cm.plasma)
+    fig.colorbar(m, shrink=0.5, pad=0.15)
+    plt.show()
+
 
 def sphere_to_carthesian(r, theta, phi):
     return r * np.sin(theta) * np.cos(phi), r * np.sin(theta) * np.sin(phi), r * np.cos(theta)
@@ -514,7 +585,7 @@ def SCSM_tri_sphere(tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0,
 
 
 @numba.jit(nopython=True, parallel=True)
-def SCSM_tri_sphere_numba(tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
+def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
     rs = tri_centers
     M = rs.shape[0]
     A = np.zeros((M, M), dtype=np.complex_)
@@ -529,13 +600,17 @@ def SCSM_tri_sphere_numba(tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.arr
 
     for i in numba.prange(M):
         r_norm_i = rs[i] / vnorm(rs[i])
+        p1 = tri_points[i][0]
+        p2 = tri_points[i][1]
+        p3 = tri_points[i][2]
+        n = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
         for j in numba.prange(M):
-            A11 = np.dot((rs[i, :] - rs[j, :]), r_norm_i)
+            A11 = np.dot((rs[i, :] - rs[j, :]), n)
             A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
             A1 = A11 / A12
             A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
             A[i, j] = A1 - A2
-        B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), r_norm_i) / (vnorm(rs[i] - r0) ** 3)
+        B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
 
     Q = np.linalg.solve(A, B)
     return Q, rs
