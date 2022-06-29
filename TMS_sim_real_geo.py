@@ -8,7 +8,11 @@ import multiprocessing.managers
 from pathlib import Path
 from functions import*
 
-
+scaling_factor = 100
+direction = np.array([1, 0, 1])
+d_norm = direction/np.linalg.norm(direction)
+r0 = 1.05 * d_norm * scaling_factor
+m = d_norm
 # path_string_original = "C:\Users\ermu8317\Downloads" #cannot be handled by python
 # path_string = path_string_original.replace("\\", "/")
 path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
