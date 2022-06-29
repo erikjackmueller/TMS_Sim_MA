@@ -4,6 +4,7 @@ import time
 import matplotlib
 matplotlib.use("TkAgg")
 import multiprocessing.managers
+from matplotlib import cm
 
 
 
@@ -21,17 +22,18 @@ class MyManager(multiprocessing.managers.BaseManager):
 MyManager.register('np_zeros', np.zeros, multiprocessing.managers.ArrayProxy)
 man = MyManager()
 if __name__ == '__main__':
-    # functions.plot_default()
     man.start()
     n = 100
-    scaling_factor = 1
-    r_max = 0.9 * scaling_factor
+    scaling_factor = 0.01
     r = 0.85 * scaling_factor
-    phi, theta = np.mgrid[0.0:r*np.pi:100j, 0.0:r*np.pi:100j]
-    # r0 = np.array([0, 1.05, 0])
-    r0 = 1.05*np.array([0.7, -0.7, 0]) * scaling_factor
-    # r0 = 1.05 * np.array([1, 0, 0]) * scaling_factor
-    m = np.array([-1, 0, 0])
+    phi1 = np.linspace(0, np.pi, 100)
+    theta1 = np.linspace(0, 2 * np.pi, 100)
+    phi2, theta2 = np.meshgrid(phi1, theta1)
+    phi, theta = phi2.T, theta2.T
+    direction = np.array([1, 0, 1])
+    d_norm = direction/np.linalg.norm(direction)
+    r0 = 1.05 * d_norm * scaling_factor
+    m = d_norm
 
     start = time.time()
     time_0 = start
@@ -41,14 +43,14 @@ if __name__ == '__main__':
 
     start = time.time()
     # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-    tc, areas = functions.read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
+    tc, areas, tri_points = functions.read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
     # functions.triangulateSphere(20)
     end = time.time()
     print(f"{end - start:.2f}s triangulation")
 
     start = time.time()
     # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
-    Q, rs = functions.SCSM_tri_sphere_numba(tc, areas, r0=r0, m=m)
+    Q, rs = functions.SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
     end = time.time()
     print(f"{end - start:.2f}s  Q calculation")
 
@@ -72,7 +74,7 @@ if __name__ == '__main__':
     print(f"relative error: {rerror_imag:.7f}%")
 
     # functions.plot_E_sphere_surf(res1, phi, theta, r)
-    functions.plot_E_sphere_surf_diff(res1, res2, phi, theta, r)
+    functions.plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.coolwarm)
     # functions.plot_E_sphere_surf(res2, phi, theta, r)
     # functions.plot_E_sphere_surf(diff, phi, theta, r)
     # functions.plot_E_sphere_surf(relative_diff, phi, theta, r)

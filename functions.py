@@ -56,7 +56,7 @@ def read_sphere_mesh_from_txt(sizes, path):
     return trangle_centers, areas
 
 
-def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False, scaling=1):
+def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
     """
     The locations from a .txt file are triangulated using Delaunay algorithm
     for that to work the 3D carthesian locations are converted to spherical coordinates
@@ -103,10 +103,9 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=False, scal
     # plot_mesh(locations, connections, 0, 1200, centers=triangle_centers)
     # ax1 = plt.axes(projection='3d')
     # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
-    if tri_points:
-        return triangle_centers, areas, triangle_points
-    else:
-        return triangle_centers, areas
+
+    return triangle_centers, areas, triangle_points
+
 
 def read_mesh_from_hdf5(fn):
     with h5py.File(fn, "r") as f:
@@ -232,6 +231,7 @@ def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([
                                 a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r_v
                     E_v = omega * mu0 / (4 * np.pi * F ** 2) * (F * np.cross(r_v, m) - np.dot(m, nab_F) * np.cross(r_v, r0_v))
                     E[i_r, i_theta] = vnorm(E_v)
+
     elif projection == "sphere_surface":
         E = np.zeros([phi.shape[0], theta.shape[0]])
         for i_phi in range(phi.shape[0]):
@@ -452,48 +452,49 @@ def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     plt.show()
 
 
-def plot_E_sphere_surf(res, phi, theta, r):
-    p, t = np.meshgrid(phi, theta)
-    x = np.cos(p) * np.sin(t)
-    y = np.sin(p) * np.sin(t)
-    z = np.cos(t)
+def plot_E_sphere_surf(res, phi, theta, r, c_map=cm.plasma):
+    x = r * np.sin(phi) * np.cos(theta)
+    y = r * np.sin(phi) * np.sin(theta)
+    z = r * np.cos(phi)
     fcolors = res
     fmax, fmin = fcolors.max(), fcolors.min()
     fcolors = (fcolors - fmin) / (fmax - fmin)
     fig = plt.figure(figsize=plt.figaspect(1.))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=cm.plasma(fcolors))
-    # ax.grid()
-    m = cm.ScalarMappable(cmap=cm.plasma)
+    ax.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors))
+    ax.grid()
+    m = cm.ScalarMappable(cmap=c_map)
     fig.colorbar(m, shrink=0.5, pad=0.15)
     plt.show()
 
-def plot_E_sphere_surf_diff(res1, res2, phi, theta, r):
+def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma):
     diff = np.abs(res2 - res1)
     fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(12, 4))
     ax1, ax2, ax3 = ax[0], ax[1], ax[2]
-    p, t = np.meshgrid(phi, theta)
-    x = np.cos(p) * np.sin(t)
-    y = np.sin(p) * np.sin(t)
-    z = np.cos(t)
+    x = r * np.sin(phi) * np.cos(theta)
+    y = r * np.sin(phi) * np.sin(theta)
+    z = r * np.cos(phi)
     fcolors1 = res1
     fmax, fmin = fcolors1.max(), fcolors1.min()
     fcolors1 = (fcolors1 - fmin) / (fmax - fmin)
     fcolors2 = res2
     fcolors2 = (fcolors2 - fmin) / (fmax - fmin)
     fcolorsdiff = diff
-    fcolorsdiff = (fcolorsdiff - fmin) / (fmax - fmin)
+    fmax_d, fmin_d = fcolorsdiff.max(), fcolorsdiff.min()
+    fcolorsdiff = (fcolorsdiff - fmin_d) / (fmax_d - fmin_d)
 
-    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=cm.plasma(fcolors1))
-    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=cm.plasma(fcolors2))
-    ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=cm.plasma(fcolorsdiff))
+    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors1))
+    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
+    ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolorsdiff))
 
     ax1.set_title("analytic")
     ax2.set_title("numeric")
     ax3.set_title("difference")
     # ax.grid()
-    m = cm.ScalarMappable(cmap=cm.plasma)
+    m = cm.ScalarMappable(cmap=c_map)
     fig.colorbar(m, shrink=0.5, pad=0.15)
+    rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
+    fig.suptitle(f"relative error: {rerror:.4f} %")
     plt.show()
 
 
@@ -747,7 +748,6 @@ def SCSM_E_sphere_numba_surf(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=
         return np.linalg.norm(x)
 
     for i in numba.prange(I):
-        # phi_i = phi[i]
         for j in numba.prange(J):
             phi_i = phi.T[0][i]
             theta_j = theta[0][j]
@@ -758,7 +758,7 @@ def SCSM_E_sphere_numba_surf(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=
             grad_phi = np.zeros((3, N), dtype=np.complex_)
             for n in numba.prange(N):
                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-            E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+            E_complex = grad_phi.sum(axis=1) - (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
                     vnorm(r_v - r0) ** 3)
             E[i, j] = vnorm(E_complex.imag)
     return E
@@ -853,32 +853,34 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     workhorse_partial = partial(E_parallel, E=E, Q=Q, r_sphere=r_sphere, r_q=r_q, r0=r0, theta=theta,
                                 m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N, projection=projection,
                                 near_field=near_field, near_radius=near_radius, tri_points=tri_points)
-    # for i in range(I):
-    #     for j in range(J):
-    #
-    #         if projection == "polar":
-    #             xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
-    #             rs = np.array([xs, ys, np.zeros(xs.shape[0])])
-    #             r_v = rs[:, i]
-    #         elif projection == "sphere_surface":
-    #             x, y, z = r_sphere * np.cos(phi[i]) * np.sin(theta[j]), r_sphere * np.sin(phi[i]) * np.sin(theta[j]),\
-    #                       r_sphere * np.cos(theta[j])
-    #             r_v = np.array([x, y, z])
-    #         else:
-    #             raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
-    #
-    #         grad_phi = np.zeros([3, N], dtype=np.complex_)
-    #         for n in range(N):
-    #             if near_field:
-    #                 if near_field:
-    #                     # eps_r = vnorm(r_q[n] - r_v)
-    #                     # if eps_r < near_radius:
-    #                     grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
-    #             else:
-    #                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-    #         E_complex = 1 * grad_phi.sum(axis=1) - 1 * (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
-    #                     vnorm(r_v - r0) ** 3)
-    #         E[i, j] = vnorm(E_complex.imag)
+    for i in range(I):
+        for j in range(J):
+
+            if projection == "polar":
+                xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
+                rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+                r_v = rs[:, i]
+            elif projection == "sphere_surface":
+                phi_i = phi[i, 0]
+                theta_j = theta[0, j]
+                x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j),\
+                          r_sphere * np.cos(phi_i)
+                r_v = np.array([x, y, z])
+            else:
+                raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
+
+            grad_phi = np.zeros([3, N], dtype=np.complex_)
+            for n in range(N):
+                if near_field:
+                    if near_field:
+                        # eps_r = vnorm(r_q[n] - r_v)
+                        # if eps_r < near_radius:
+                        grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
+                else:
+                    grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            E_complex = grad_phi.sum(axis=1) - (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+                        vnorm(r_v - r0) ** 3)
+            E[i, j] = vnorm(E_complex.imag)
 
     # for i in range(I):
     #     for j in range(J):

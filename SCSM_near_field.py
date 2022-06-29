@@ -32,7 +32,7 @@ if __name__ == '__main__':
     print(f"{end - start:.2f}s receprocity")
 
     start = time.time()
-    tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, tri_points=True)
+    tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path)
     # functions.triangulateSphere(20)
     end = time.time()
     print(f"{end - start:.2f}s triangulation")

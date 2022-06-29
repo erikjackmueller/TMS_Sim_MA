@@ -41,14 +41,14 @@ if __name__ == '__main__':
 
     start = time.time()
     # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-    tc, areas = functions.read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
+    tc, areas, tri_points = functions.read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
     # functions.triangulateSphere(20)
     end = time.time()
     print(f"{end - start:.2f}s triangulation")
 
     start = time.time()
     # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
-    Q, rs = functions.SCSM_tri_sphere_numba(tc, areas, r0=r0, m=m)
+    Q, rs = functions.SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
     end = time.time()
     print(f"{end - start:.2f}s  Q calculation")
 
