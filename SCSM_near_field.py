@@ -5,8 +5,10 @@ import matplotlib
 matplotlib.use("TkAgg")
 import multiprocessing.managers
 
-path = "Sphere_642"
-sizes = [642, 1280]
+# path = "Sphere_642"
+# sizes = [642, 1280]
+path = "Sphere_10242"
+sizes = [10242, 1280]
 
 class MyManager(multiprocessing.managers.BaseManager):
     pass
@@ -18,11 +20,11 @@ if __name__ == '__main__':
     man.start()
     n = 100
     r_max = 0.93
-    r = np.linspace(0.41, r_max, n)
+    r = np.linspace(0.61, r_max, n)
     theta = np.linspace(0, np.pi, n)
     phi = (1/2)*np.pi
     # r0 = np.array([0, 1.05, 0])
-    r0 = 1.05*np.array([0, 1, 0])
+    r0 = 1.1*np.array([0, 1, 0])
     m = np.array([-1, 0, 0])
 
     start = time.time()
@@ -61,10 +63,10 @@ if __name__ == '__main__':
     rerror_imag = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
     rerror_fine = np.linalg.norm(dif2) * 100 / np.linalg.norm(res1)
 
-    print(f"relative error no near field: {rerror_imag:.7f}%")
     print(f"relative error with near field: {rerror_fine:.7f}%")
+    print(f"relative error no near field: {rerror_imag:.7f}%")
 
-    plot_E_diff(res1, res2, r, theta, r_max, r0, m)
     plot_E_diff(res1, res_fine, r, theta, r_max, r0, m)
+    plot_E_diff(res1, res2, r, theta, r_max, r0, m)
     plot_E_diff(res2, res_fine, r, theta, r_max, r0, m)
 

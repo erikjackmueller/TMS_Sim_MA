@@ -120,10 +120,12 @@ def read_mesh_from_hdf5(fn):
         triangle_number_list = np.array(f['mesh']['elm']['triangle_number_list'])
         node_number = np.array(f['mesh']['nodes']['node_number'])
         node_coords = np.array(f['mesh']['nodes']['node_coord'])
-
-    elms_wm = elm_number[np.where(elm_type == 2)]
-    tris_wm = triangle_number_list[np.where(elm_type == 2)]
-    n = tris_wm.shape[0]
+    # only consider white matter tissue for test evaluation
+    tris_wm = triangle_number_list[np.where(tri_tissue_type == 1001)]
+    tris_gm = triangle_number_list[np.where(tri_tissue_type == 1002)]
+    tris_csf = triangle_number_list[np.where(tri_tissue_type == 1003)]
+    points = tris_csf
+    n = points.shape[0]
     triangle_centers = np.zeros([n, 3])
     areas = np.zeros(n)
 
@@ -134,9 +136,9 @@ def read_mesh_from_hdf5(fn):
 
     triangle_points = np.zeros((n, 3, 3))
     for i in range(n):
-        p1 = node_coords[int(tris_wm[i, 0]), :]
-        p2 = node_coords[int(tris_wm[i, 1]), :]
-        p3 = node_coords[int(tris_wm[i, 2]), :]
+        p1 = node_coords[int(points[i, 0]), :]
+        p2 = node_coords[int(points[i, 1]), :]
+        p3 = node_coords[int(points[i, 2]), :]
         triangle_points[i][:][:] = np.vstack((p1, p2, p3))
         p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
         p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
@@ -145,10 +147,10 @@ def read_mesh_from_hdf5(fn):
         line1_2 = p2 - p1
         line1_3 = p3 - p1
         areas[i] = 0.5 * np.linalg.norm(np.cross(line1_2, line1_3))
-    plot_mesh(node_coords.T, tris_wm.T, 0, n, centers=triangle_centers)
+    # plot_mesh(node_coords.T, points.T, 0, n, centers=triangle_centers)
     # ax1 = plt.axes(projection='3d')
     # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
-    return triangle_centers, areas
+    return triangle_centers, areas, triangle_points
 
 def plot_mesh(locations, connections, n1, n2, centers=None):
     fig = plt.figure()
@@ -853,34 +855,34 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     workhorse_partial = partial(E_parallel, E=E, Q=Q, r_sphere=r_sphere, r_q=r_q, r0=r0, theta=theta,
                                 m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N, projection=projection,
                                 near_field=near_field, near_radius=near_radius, tri_points=tri_points)
-    for i in range(I):
-        for j in range(J):
-
-            if projection == "polar":
-                xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
-                rs = np.array([xs, ys, np.zeros(xs.shape[0])])
-                r_v = rs[:, i]
-            elif projection == "sphere_surface":
-                phi_i = phi[i, 0]
-                theta_j = theta[0, j]
-                x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j),\
-                          r_sphere * np.cos(phi_i)
-                r_v = np.array([x, y, z])
-            else:
-                raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
-
-            grad_phi = np.zeros([3, N], dtype=np.complex_)
-            for n in range(N):
-                if near_field:
-                    if near_field:
-                        # eps_r = vnorm(r_q[n] - r_v)
-                        # if eps_r < near_radius:
-                        grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
-                else:
-                    grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-            E_complex = grad_phi.sum(axis=1) - (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
-                        vnorm(r_v - r0) ** 3)
-            E[i, j] = vnorm(E_complex.imag)
+    # for i in range(I):
+    #     for j in range(J):
+    #
+    #         if projection == "polar":
+    #             xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
+    #             rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+    #             r_v = rs[:, i]
+    #         elif projection == "sphere_surface":
+    #             phi_i = phi[i, 0]
+    #             theta_j = theta[0, j]
+    #             x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j),\
+    #                       r_sphere * np.cos(phi_i)
+    #             r_v = np.array([x, y, z])
+    #         else:
+    #             raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
+    #
+    #         grad_phi = np.zeros([3, N], dtype=np.complex_)
+    #         for n in range(N):
+    #             if near_field:
+    #                 if near_field:
+    #                     # eps_r = vnorm(r_q[n] - r_v)
+    #                     # if eps_r < near_radius:
+    #                     grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
+    #             else:
+    #                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+    #         E_complex = grad_phi.sum(axis=1) - (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
+    #                     vnorm(r_v - r0) ** 3)
+    #         E[i, j] = vnorm(E_complex.imag)
 
     # for i in range(I):
     #     for j in range(J):
