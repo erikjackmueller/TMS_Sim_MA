@@ -15,6 +15,7 @@ import os
 import time
 import multiprocessing
 import multiprocessing.managers
+import fmm3dpy as fmm
 
 
 def read_sphere_mesh_from_txt(sizes, path):
@@ -501,7 +502,16 @@ def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma):
 
 
 def sphere_to_carthesian(r, theta, phi):
-    return r * np.sin(theta) * np.cos(phi), r * np.sin(theta) * np.sin(phi), r * np.cos(theta)
+    x = r * np.sin(phi) * np.cos(theta)
+    y = r * np.sin(phi) * np.sin(theta)
+    z = r * np.cos(phi)
+    return np.vstack((x, y, z)).T
+
+def circle_to_carthesian(r, theta):
+    x = r * np.cos(theta)
+    y = r * np.sin(theta)
+    z = np.zeros(r.shape[0])
+    return np.vstack((x, y, z)).T
 
 
 def carthesian_to_sphere(r_carth):
@@ -658,6 +668,19 @@ def SCSM_Q_parallel(manager, tri_centers, areas, r0=np.array([0, 0, 1.1]), m=np.
     Q = np.linalg.solve(np.array(A), np.array(B))
     return Q, rs
 
+def SCSM_FMM_E(Q, r_source, r_target, eps, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1,
+                        projection="polar"):
+    eps0 = 8.854187812813e-12
+    n = r_target.shape[0]
+    E = np.zeros(n)
+    charges = Q.imag
+    fmm_res_phi = fmm.lfmm3d(eps=eps, sources=r_source.T, charges=charges, pg=2, pgt=2, targets=r_target.T)
+    grad_phi = -1/(4 * np.pi * eps0) * fmm_res_phi.gradtarg.T
+    for i in range(n):
+                r_v = r_target[i]
+                E_v = grad_phi[i] - (omega * 1e-7) * (np.cross(m, (r_v - r0))) / (vnorm(r_v - r0) ** 3)
+                E[i] = vnorm(E_v)
+    return E
 
 @numba.jit(nopython=True, parallel=True)
 def SCSM_E_sphere_numba(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1,
@@ -855,34 +878,33 @@ def parallel_SCSM_E_sphere(manager, Q, r_q, r_sphere, theta, m=np.array([0, 1, 0
     workhorse_partial = partial(E_parallel, E=E, Q=Q, r_sphere=r_sphere, r_q=r_q, r0=r0, theta=theta,
                                 m=m, phi=phi, omega=omega, eps0=eps0, mu0=mu0, N=N, projection=projection,
                                 near_field=near_field, near_radius=near_radius, tri_points=tri_points)
-    # for i in range(I):
-    #     for j in range(J):
-    #
-    #         if projection == "polar":
-    #             xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
-    #             rs = np.array([xs, ys, np.zeros(xs.shape[0])])
-    #             r_v = rs[:, i]
-    #         elif projection == "sphere_surface":
-    #             phi_i = phi[i, 0]
-    #             theta_j = theta[0, j]
-    #             x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j),\
-    #                       r_sphere * np.cos(phi_i)
-    #             r_v = np.array([x, y, z])
-    #         else:
-    #             raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
-    #
-    #         grad_phi = np.zeros([3, N], dtype=np.complex_)
-    #         for n in range(N):
-    #             if near_field:
-    #                 if near_field:
-    #                     # eps_r = vnorm(r_q[n] - r_v)
-    #                     # if eps_r < near_radius:
-    #                     grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
-    #             else:
-    #                 grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
-    #         E_complex = grad_phi.sum(axis=1) - (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (
-    #                     vnorm(r_v - r0) ** 3)
-    #         E[i, j] = vnorm(E_complex.imag)
+    for i in range(I):
+        for j in range(J):
+
+            if projection == "polar":
+                xs, ys = r_sphere * np.cos(theta[j]), r_sphere * np.sin(theta[j])
+                rs = np.array([xs, ys, np.zeros(xs.shape[0])])
+                r_v = rs[:, i]
+            elif projection == "sphere_surface":
+                phi_i = phi[i, 0]
+                theta_j = theta[0, j]
+                x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j),\
+                          r_sphere * np.cos(phi_i)
+                r_v = np.array([x, y, z])
+            else:
+                raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
+
+            grad_phi = np.zeros([3, N], dtype=np.complex_)
+            for n in range(N):
+                if near_field:
+                    if near_field:
+                        # eps_r = vnorm(r_q[n] - r_v)
+                        # if eps_r < near_radius:
+                        grad_phi[:, n] = E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v)
+                else:
+                    grad_phi[:, n] = Q[n] * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3)
+            E_complex = grad_phi.sum(axis=1) - (1j * omega * 1e-7) * (np.cross(m, (r_v - r0))) / (vnorm(r_v - r0) ** 3)
+            E[i, j] = vnorm(E_complex.imag)
 
     # for i in range(I):
     #     for j in range(J):
@@ -1069,3 +1091,11 @@ def fibonacci_sphere_mesh(samples=1000):
         points.append((x, y, z))
 
     return points
+
+def array_unflatten(array, n_rows=1):
+
+    n_cols = int(array.shape[0] / n_rows)
+    new_array = np.zeros((n_rows, n_cols))
+    for i in range(n_rows):
+        new_array[i, :] = array[(i * n_cols):((i + 1) * n_cols)]
+    return new_array

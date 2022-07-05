@@ -32,6 +32,8 @@ if __name__ == '__main__':
     # r0 = np.array([0, 1.05, 0])
     r0 = 1.05*np.array([0, 1, 0]) * scaling_factor
     m = np.array([-1, 0, 0])
+    r_t, t_t = np.meshgrid(r, theta)
+    r_target = functions.circle_to_carthesian(r=r_t.flatten(), theta=t_t.flatten())
 
     start = time.time()
     time_0 = start
@@ -54,9 +56,11 @@ if __name__ == '__main__':
 
     start = time.time()
 
+    res_flat = functions.SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-15, m=m, r0=r0)
+    res = functions.array_unflatten(res_flat, n_rows=n).T
     # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
-    res = functions.SCSM_E_sphere_numba_polar(Q, rs, r, theta, r0=r0, m=m)
+    # res = functions.SCSM_E_sphere_numba_polar(Q, rs, r, theta, r0=r0, m=m)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end

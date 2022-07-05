@@ -34,6 +34,9 @@ if __name__ == '__main__':
     d_norm = direction/np.linalg.norm(direction)
     r0 = 1.05 * d_norm * scaling_factor
     m = d_norm
+    r_target = functions.sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
+
+
 
     start = time.time()
     time_0 = start
@@ -56,9 +59,11 @@ if __name__ == '__main__':
 
     start = time.time()
 
-    res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta=theta, phi=phi, r0=r0, m=m, projection="sphere_surface")
+    res_flat = functions.SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-15, m=m, r0=r0)
+    res = functions.array_unflatten(res_flat, n_rows=n)
+    # res3 = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta=theta, phi=phi, r0=r0, m=m, projection="sphere_surface")
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
-    # res = functions.SCSM_E_sphere_numba_surf(Q, rs, r, theta, r0=r0, m=m, phi=phi)
+    # res1 = functions.SCSM_E_sphere_numba_surf(Q, rs, r, theta, r0=r0, m=m, phi=phi)
     end = time.time()
     print(f"{(end - start)/60:.2f}minutes E calculation")
     time_last = end
@@ -73,7 +78,7 @@ if __name__ == '__main__':
 
     print(f"relative error: {rerror_imag:.7f}%")
 
-    # functions.plot_E_sphere_surf(res1, phi, theta, r)
+    # functions.plot_E_sphere_surf(res, phi, theta, r)
     functions.plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.coolwarm)
     # functions.plot_E_sphere_surf(res2, phi, theta, r)
     # functions.plot_E_sphere_surf(diff, phi, theta, r)

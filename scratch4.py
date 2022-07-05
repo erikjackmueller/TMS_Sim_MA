@@ -3,6 +3,7 @@ import numpy as np
 from matplotlib import cm, colors
 from mpl_toolkits.mplot3d import Axes3D
 
+
 def fun(phi, theta, n):
     res = np.zeros((n, n))
     for i in range(n):
@@ -14,7 +15,7 @@ def fun(phi, theta, n):
 
 r = 0.05
 N = 100
-phi, theta = np.linspace(0, 2*np.pi, N), np.linspace(0, 2*np.pi, N)
+phi, theta = np.linspace(0, np.pi, N), np.linspace(0, 2*np.pi, N)
 # u, v = np.mgrid[0:2 * np.pi:100j, 0:np.pi:100j]
 u, v = np.meshgrid(phi, theta)
 x = np.cos(u) * np.sin(v)
