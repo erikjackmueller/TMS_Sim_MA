@@ -1,4 +1,4 @@
-import functions
+from functions import*
 import numpy as np
 import time
 import matplotlib
@@ -23,51 +23,56 @@ MyManager.register('np_zeros', np.zeros, multiprocessing.managers.ArrayProxy)
 man = MyManager()
 if __name__ == '__main__':
     man.start()
-    n = 100
-    scaling_factor = 0.01
+    n = 1000
+    scaling_factor = 1
     r = 0.85 * scaling_factor
-    phi1 = np.linspace(0, np.pi, 100)
-    theta1 = np.linspace(0, 2 * np.pi, 100)
+    phi1 = np.linspace(0, np.pi, n)
+    theta1 = np.linspace(0, 2 * np.pi, n)
     phi2, theta2 = np.meshgrid(phi1, theta1)
     phi, theta = phi2.T, theta2.T
     direction = np.array([1, 0, 1])
     d_norm = direction/np.linalg.norm(direction)
     r0 = 1.05 * d_norm * scaling_factor
     m = d_norm
-    r_target = functions.sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
+    r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 
 
 
     start = time.time()
     time_0 = start
-    res1 = functions.reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface")
+    res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface")
     end = time.time()
-    print(f"{end - start:.2f}s receprocity")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + " receprocity")
 
     start = time.time()
     # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-    tc, areas, tri_points = functions.read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
+    tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
     # functions.triangulateSphere(20)
     end = time.time()
-    print(f"{end - start:.2f}s triangulation")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + " triangulation")
 
     start = time.time()
     # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
-    Q, rs = functions.SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
+    Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
     end = time.time()
-    print(f"{end - start:.2f}s  Q calculation")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + "  Q calculation")
 
     start = time.time()
 
-    res_flat = functions.SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-15, m=m, r0=r0)
-    res = functions.array_unflatten(res_flat, n_rows=n)
+    res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-15, m=m, r0=r0)
+    res = array_unflatten(res_flat, n_rows=n)
     # res3 = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta=theta, phi=phi, r0=r0, m=m, projection="sphere_surface")
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
     # res1 = functions.SCSM_E_sphere_numba_surf(Q, rs, r, theta, r0=r0, m=m, phi=phi)
     end = time.time()
-    print(f"{(end - start)/60:.2f}minutes E calculation")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + "  E calculation")
     time_last = end
-    print(f"{(time_last - time_0) / 60:.2f}minutes complete simulation")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + "  complete simulation")
 
     res2 = res.copy()
 
@@ -79,7 +84,7 @@ if __name__ == '__main__':
     print(f"relative error: {rerror_imag:.7f}%")
 
     # functions.plot_E_sphere_surf(res, phi, theta, r)
-    functions.plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.coolwarm)
+    plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.coolwarm)
     # functions.plot_E_sphere_surf(res2, phi, theta, r)
     # functions.plot_E_sphere_surf(diff, phi, theta, r)
     # functions.plot_E_sphere_surf(relative_diff, phi, theta, r)

@@ -16,6 +16,8 @@ import time
 import multiprocessing
 import multiprocessing.managers
 import fmm3dpy as fmm
+from mpmath import fp
+import dask.array as da
 
 
 def read_sphere_mesh_from_txt(sizes, path):
@@ -108,50 +110,67 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
     return triangle_centers, areas, triangle_points
 
 
-def read_mesh_from_hdf5(fn):
-    with h5py.File(fn, "r") as f:
-        a_group_key = list(f.keys())[0]
-        key_list = list(f.keys())
+def read_mesh_from_hdf5(fn, mode="source"):
 
-        mesh_data = f['mesh']
-        elm_number = np.array(f['mesh']['elm']['elm_number'])
-        elm_type = np.array(f['mesh']['elm']['elm_type'])
-        node_number_list = np.array(f['mesh']['elm']['node_number_list'])
-        tri_tissue_type = np.array(f['mesh']['elm']['tri_tissue_type'])
-        triangle_number_list = np.array(f['mesh']['elm']['triangle_number_list'])
-        node_number = np.array(f['mesh']['nodes']['node_number'])
-        node_coords = np.array(f['mesh']['nodes']['node_coord'])
-    # only consider white matter tissue for test evaluation
-    tris_wm = triangle_number_list[np.where(tri_tissue_type == 1001)]
-    tris_gm = triangle_number_list[np.where(tri_tissue_type == 1002)]
-    tris_csf = triangle_number_list[np.where(tri_tissue_type == 1003)]
-    points = tris_csf
-    n = points.shape[0]
-    triangle_centers = np.zeros([n, 3])
-    areas = np.zeros(n)
+    if mode == "source":
+        source = True
+        target = False
+    elif mode == "target":
+        source = False
+        target = True
+    else:
+        raise ValueError("mode can only be 'source' or 'target'!")
 
-    # calculate centerpoints of trinagles from connections and vertexes
-    # center is (AB + BC + CA) / 3 starting from A
-    # for a flat trangle in space that should be (x1 + x2 + x3)/3, (y1 + y2 + y3)/3, (z1 + z2 + z3)/3
-    # for the area the formula is S = 1/2|AB x AC|, x is the crossproduct in this case
+    if source:
+        with h5py.File(fn, "r") as f:
+            mesh_data = f['mesh']
+            elm_number = np.array(f['mesh']['elm']['elm_number'])
+            elm_type = np.array(f['mesh']['elm']['elm_type'])
+            node_number_list = np.array(f['mesh']['elm']['node_number_list'])
+            tri_tissue_type = np.array(f['mesh']['elm']['tri_tissue_type'])
+            triangle_number_list = np.array(f['mesh']['elm']['triangle_number_list'])
+            node_number = np.array(f['mesh']['nodes']['node_number'])
+            node_coords = np.array(f['mesh']['nodes']['node_coord'])
+        # only consider white matter tissue for test evaluation
+        tris_wm = triangle_number_list[np.where(tri_tissue_type == 1001)]
+        tris_gm = triangle_number_list[np.where(tri_tissue_type == 1002)]
+        tris_csf = triangle_number_list[np.where(tri_tissue_type == 1003)]
+        points = tris_csf
 
-    triangle_points = np.zeros((n, 3, 3))
-    for i in range(n):
-        p1 = node_coords[int(points[i, 0]), :]
-        p2 = node_coords[int(points[i, 1]), :]
-        p3 = node_coords[int(points[i, 2]), :]
-        triangle_points[i][:][:] = np.vstack((p1, p2, p3))
-        p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
-        p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
-        p_c_3 = (p1[2] + p2[2] + p3[2]) / 3
-        triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
-        line1_2 = p2 - p1
-        line1_3 = p3 - p1
-        areas[i] = 0.5 * np.linalg.norm(np.cross(line1_2, line1_3))
-    # plot_mesh(node_coords.T, points.T, 0, n, centers=triangle_centers)
-    # ax1 = plt.axes(projection='3d')
-    # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
-    return triangle_centers, areas, triangle_points
+
+
+        n = points.shape[0]
+        triangle_centers = np.zeros([n, 3])
+        areas = np.zeros(n)
+
+        # calculate centerpoints of trinagles from connections and vertexes
+        # center is (AB + BC + CA) / 3 starting from A
+        # for a flat trangle in space that should be (x1 + x2 + x3)/3, (y1 + y2 + y3)/3, (z1 + z2 + z3)/3
+        # for the area the formula is S = 1/2|AB x AC|, x is the crossproduct in this case
+
+        triangle_points = np.zeros((n, 3, 3))
+        for i in range(n):
+            p1 = node_coords[int(points[i, 0]), :]
+            p2 = node_coords[int(points[i, 1]), :]
+            p3 = node_coords[int(points[i, 2]), :]
+            triangle_points[i][:][:] = np.vstack((p1, p2, p3))
+            p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
+            p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
+            p_c_3 = (p1[2] + p2[2] + p3[2]) / 3
+            triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
+            line1_2 = p2 - p1
+            line1_3 = p3 - p1
+            areas[i] = 0.5 * np.linalg.norm(np.cross(line1_2, line1_3))
+        # plot_mesh(node_coords.T, points.T, 0, n, centers=triangle_centers)
+        # ax1 = plt.axes(projection='3d')
+        # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
+
+        return triangle_centers, areas, triangle_points
+
+    elif target:
+        with h5py.File(fn, "r") as f:
+            triangle_centers = np.array(f['roi_surface']['midlayer_m1s1pmd']['tri_center_coord_mid'])
+        return triangle_centers
 
 def plot_mesh(locations, connections, n1, n2, centers=None):
     fig = plt.figure()
@@ -624,9 +643,39 @@ def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1
             A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
             A[i, j] = A1 - A2
         B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
-
+    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
     Q = np.linalg.solve(A, B)
     return Q, rs
+
+def SCSM_tri_sphere_dask(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
+    rs = tri_centers
+    M = rs.shape[0]
+    A = da.zeros((M, M), dtype=complex)
+    B = da.zeros(M, dtype=complex)
+    eps0 = 8.854187812813e-12
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    def kroen(i, j):
+        return int(i == j)
+
+    for i in range(M):
+        r_norm_i = rs[i] / vnorm(rs[i])
+        p1 = tri_points[i][0]
+        p2 = tri_points[i][1]
+        p3 = tri_points[i][2]
+        n = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+        for j in range(M):
+            A11 = np.dot((rs[i, :] - rs[j, :]), n)
+            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
+            A1 = A11 / A12
+            A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
+            A[i, j] = A1 - A2
+        B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
+    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
+    Q = da.linalg.solve(A, B)
+    return Q.compute(), rs
 
 
 def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
@@ -1099,3 +1148,18 @@ def array_unflatten(array, n_rows=1):
     for i in range(n_rows):
         new_array[i, :] = array[(i * n_cols):((i + 1) * n_cols)]
     return new_array
+
+def t_format(time):
+    if time < 60:
+        return time, "s"
+    else:
+        t_min = time / 60
+        if t_min < 60:
+            return t_min, "min"
+        else:
+            t_h = t_min / 60
+            if t_h < 24:
+                return t_h, "h"
+            else:
+                t_d = t_h / 24
+                return t_d, "d"

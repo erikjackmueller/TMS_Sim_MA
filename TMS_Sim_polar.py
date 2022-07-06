@@ -1,4 +1,4 @@
-import functions
+from functions import*
 import numpy as np
 import time
 import matplotlib
@@ -23,7 +23,7 @@ man = MyManager()
 if __name__ == '__main__':
     # functions.plot_default()
     man.start()
-    n = 100
+    n = 1000
     scaling_factor = 0.1
     r_max = 0.9 * scaling_factor
     r = np.linspace(0.41 * scaling_factor, r_max, n)
@@ -33,38 +33,43 @@ if __name__ == '__main__':
     r0 = 1.05*np.array([0, 1, 0]) * scaling_factor
     m = np.array([-1, 0, 0])
     r_t, t_t = np.meshgrid(r, theta)
-    r_target = functions.circle_to_carthesian(r=r_t.flatten(), theta=t_t.flatten())
+    r_target = circle_to_carthesian(r=r_t.flatten(), theta=t_t.flatten())
 
     start = time.time()
     time_0 = start
-    res1 = functions.reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi)
+    res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi)
     end = time.time()
-    print(f"{end - start:.2f}s receprocity")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + " receprocity")
 
     start = time.time()
     # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-    tc, areas, tri_points = functions.read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
+    tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
     # functions.triangulateSphere(20)
     end = time.time()
-    print(f"{end - start:.2f}s triangulation")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + " triangulation")
 
     start = time.time()
     # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
-    Q, rs = functions.SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
+    Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
     end = time.time()
-    print(f"{end - start:.2f}s  Q calculation")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + "  Q calculation")
 
     start = time.time()
 
-    res_flat = functions.SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-15, m=m, r0=r0)
-    res = functions.array_unflatten(res_flat, n_rows=n).T
+    res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-15, m=m, r0=r0)
+    res = array_unflatten(res_flat, n_rows=n).T
     # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
     # res = functions.SCSM_E_sphere_numba_polar(Q, rs, r, theta, r0=r0, m=m)
     end = time.time()
-    print(f"{(end - start)/60:.2f}minutes E calculation")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + " E calculation")
     time_last = end
-    print(f"{(time_last - time_0) / 60:.2f}minutes complete simulation")
+    t = t_format(end - start)
+    print(f"{t[0]:.2f}" + t[1] + " complete simulation")
 
     res2 = res.copy()
 
@@ -78,7 +83,7 @@ if __name__ == '__main__':
     # functions.plot_E(res2, r, theta, r_max)
     # functions.plot_E(res2, r, theta, r_max)
     # functions.plot_E(diff_to_imag, r, theta, r_max)
-    functions.plot_E_diff(res1, res2, r, theta, r_max, r0, m)
+    plot_E_diff(res1, res2, r, theta, r_max, r0, m)
     # functions.plot_E(relative_diff, r, theta, r_max)
     # plt.savefig("sample" + ".png")
     # functions.plot_E_diff(res2, res3, r, theta, r_max, r0, m)
