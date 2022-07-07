@@ -11,10 +11,10 @@ import multiprocessing.managers
 # path = os.path.realpath(Path("C:/Users/Besitzer/Downloads/Sphere_642"))
 # path = "Sphere_10242"
 # sizes = [10242, 1280]
-# path = "Sphere_2964"
-# sizes = [2964, 1280]
-path = "Sphere_642"
-sizes = [642, 1280]
+path = "Sphere_2964"
+sizes = [2964, 1280]
+# path = "Sphere_642"
+# sizes = [642, 1280]
 
 class MyManager(multiprocessing.managers.BaseManager):
     pass
@@ -23,7 +23,7 @@ man = MyManager()
 if __name__ == '__main__':
     # functions.plot_default()
     man.start()
-    n = 1000
+    n = 100
     scaling_factor = 0.1
     r_max = 0.9 * scaling_factor
     r = np.linspace(0.41 * scaling_factor, r_max, n)
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     t = t_format(end - start)
     print(f"{t[0]:.2f}" + t[1] + " E calculation")
     time_last = end
-    t = t_format(end - start)
+    t = t_format(end - time_0)
     print(f"{t[0]:.2f}" + t[1] + " complete simulation")
 
     res2 = res.copy()

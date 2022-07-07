@@ -23,7 +23,7 @@ MyManager.register('np_zeros', np.zeros, multiprocessing.managers.ArrayProxy)
 man = MyManager()
 if __name__ == '__main__':
     man.start()
-    n = 1000
+    n = 100
     scaling_factor = 1
     r = 0.85 * scaling_factor
     phi1 = np.linspace(0, np.pi, n)
@@ -71,7 +71,7 @@ if __name__ == '__main__':
     t = t_format(end - start)
     print(f"{t[0]:.2f}" + t[1] + "  E calculation")
     time_last = end
-    t = t_format(end - start)
+    t = t_format(end - time_0)
     print(f"{t[0]:.2f}" + t[1] + "  complete simulation")
 
     res2 = res.copy()

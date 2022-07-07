@@ -435,7 +435,7 @@ def plot_E(res, r, theta, r_max):
     plt.show()
 
 
-def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
+def plot_E_diff_test(res1, res2, r, theta, r_max, r0=None, m=None):
     diff = np.abs(res2 - res1)
     fig, ax = plt.subplots(1, 4, subplot_kw={'projection': 'polar'}, figsize=(18, 4))
     ax0, ax1, ax2, ax3 = ax[0], ax[1], ax[2], ax[3]
@@ -471,6 +471,37 @@ def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     rerror = np.linalg.norm(diff) / np.linalg.norm(res1)
     fig.suptitle(f"relative error: {rerror:.6f}, r0 = {r0}, m = {m}")
 
+    plt.show()
+
+def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
+    diff = np.abs(res2 - res1)
+    fig, ax = plt.subplots(1, 3, subplot_kw={'projection': 'polar'}, figsize=(14, 4))
+    ax1, ax2, ax3 = ax[0], ax[1], ax[2]
+    f_max = max(res1.max(), res2.max())
+    f_min = min(res1.min(), res2.min())
+    im = ax1.pcolormesh(theta, r, res1, cmap='plasma', vmin=f_min, vmax=f_max)
+    ax1.set_yticklabels([])
+    ax1.set_ylim(0, r_max)
+    # ax1.set_yticks(np.arange(0, r_max, r_max/10))
+    ax1.grid(True)
+    im = ax2.pcolormesh(theta, r, res2, cmap='plasma', vmin=f_min, vmax=f_max)
+    ax2.set_yticklabels([])
+    ax2.set_ylim(0, r_max)
+    # ax2.set_yticks(np.arange(0, r_max, r_max / 10))
+    ax2.grid(True)
+    im = ax3.pcolormesh(theta, r, diff, cmap='plasma', vmin=f_min, vmax=f_max)
+    ax3.set_yticklabels([])
+    ax3.set_ylim(0, r_max)
+    # ax3.set_yticks(np.arange(0, r_max, r_max / 10))
+    ax3.grid(True)
+    fig.colorbar(im)
+    ax1.set_title("analytic")
+    ax2.set_title("numeric")
+    ax3.set_title("difference")
+    plt.subplots_adjust(wspace=0.7)
+    plt.subplots_adjust(hspace=0.5)
+    rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
+    fig.suptitle(f"relative error: {rerror:.4f}%")
     plt.show()
 
 
@@ -518,6 +549,8 @@ def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma):
     rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
     fig.suptitle(f"relative error: {rerror:.4f} %")
     plt.show()
+
+
 
 
 def sphere_to_carthesian(r, theta, phi):
