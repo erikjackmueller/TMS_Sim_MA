@@ -4,6 +4,7 @@ from matplotlib import cm, colors
 from mpl_toolkits.mplot3d import Axes3D
 
 
+
 def fun(phi, theta, n):
     res = np.zeros((n, n))
     for i in range(n):
