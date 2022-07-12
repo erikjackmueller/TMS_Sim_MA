@@ -109,6 +109,32 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
 
     return triangle_centers, areas, triangle_points
 
+def sphere_mesh(samples=1000, scaling=1):
+
+    locations = fibonacci_sphere_mesh(samples=samples).T
+    sphere_surf_locations = carthesian_to_sphere(locations.T)[:, 1:]
+    tri = Delaunay(sphere_surf_locations)
+    connections = tri.simplices.copy().T
+
+    triangle_centers = np.zeros([len(connections[0, :]), 3])
+    areas = np.zeros(len(connections[0, :]))
+
+    n = len(connections[0, :])
+    triangle_points = np.zeros((n, 3, 3))
+    for i in range(n):
+        p1 = locations[:, int(connections[0, i])]
+        p2 = locations[:, int(connections[1, i])]
+        p3 = locations[:, int(connections[2, i])]
+        triangle_points[i][:][:] = np.vstack((p1, p2, p3))
+        p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
+        p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
+        p_c_3 = (p1[2] + p2[2] + p3[2]) / 3
+        triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
+        line1_2 = p2 - p1
+        line1_3 = p3 - p1
+        areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
+
+    return triangle_centers, areas, triangle_points
 
 def read_mesh_from_hdf5(fn, mode="source"):
 
@@ -678,7 +704,75 @@ def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1
         B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
     # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
     Q = np.linalg.solve(A, B)
+
     return Q, rs
+
+@numba.jit(nopython=True, parallel=True)
+def SCSM_jacobi_iter(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
+                          omega=1, n_iter=1000, tol=1e-15, A=None, b=None, initial_guess=False, verbose=False):
+
+    rs = tri_centers
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+    # A = np.zeros((M, M), dtype=np.complex_)
+    B = np.zeros(M, dtype=np.complex_)
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    def kroen(i, j):
+        return int(i == j)
+
+    def a_fun(i, M, areas, r0, m, sig, omega, n):
+
+        A_i = np.zeros(M, np.complex_)
+        for j in numba.prange(M):
+            A11 = np.dot((rs[i, :] - rs[j, :]), n)
+            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
+            A1 = A11 / A12
+            A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
+            A_i[j] = A1 - A2
+        return A_i
+    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
+    x = np.zeros(M, np.complex_)
+    if initial_guess:
+        for i in numba.prange(M):
+            aii = eps0 * areas[i] / ((1 / 2) + ((1j * omega * eps0) / sig))
+            x[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), rs[i]/vnorm(rs[i])) / (aii * vnorm(rs[i] - r0) ** 3)
+
+    for it_count in numba.prange(n_iter):
+        # if it_count != 0 and verbose:
+        #     print("Iteration {0}: {1}".format(it_count, x))
+        x_new = np.zeros_like(x)
+
+        for i in numba.prange(M):
+            if not A is None and not b is None:
+                a_i = A[i, :]
+                b_i = b[i]
+            else:
+                p1 = tri_points[i][0]
+                p2 = tri_points[i][1]
+                p3 = tri_points[i][2]
+                n = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+                a_i = a_fun(i, M, areas, r0, m, sig, omega, n)
+                b_i = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
+                # if it_count == 0:
+                #     A[i, :] = a_i
+                #     B[i] = b_i
+            a_ii = a_i[i]
+            s1 = np.dot(a_i[:i], x[:i])
+            s2 = np.dot(a_i[i + 1:], x[i + 1:])
+            x_new[i] = (b_i - s1 - s2) / a_ii
+            if x_new[i] == x_new[i - 1]:
+                break
+
+        # if np.allclose(x, x_new, atol=tol, rtol=0.):
+        if vnorm(x - x_new) < tol:
+            break
+
+        x = x_new
+
+    return x
 
 def SCSM_tri_sphere_dask(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
     rs = tri_centers
@@ -1172,7 +1266,7 @@ def fibonacci_sphere_mesh(samples=1000):
 
         points.append((x, y, z))
 
-    return points
+    return np.array(points)
 
 def array_unflatten(array, n_rows=1):
 
@@ -1196,3 +1290,45 @@ def t_format(time):
             else:
                 t_d = t_h / 24
                 return t_d, "d"
+
+def Jacobi_iter(A, b, n_iter, tol, rho=0, verbose=False):
+
+    x = np.zeros_like(b)
+    for it_count in range(n_iter):
+        if it_count != 0 and rho < 1 and verbose:
+            print("Iteration {0}: {1}".format(it_count, x))
+        x_new = np.zeros_like(x)
+
+        for i in range(A.shape[0]):
+            a_i = A[i, :]
+            a_ii = A[i, i]
+            s1 = np.dot(a_i[:i], x[:i])
+            s2 = np.dot(a_i[i + 1:], x[i + 1:])
+            x_new[i] = (b[i] - s1 - s2) / a_ii
+            if x_new[i] == x_new[i - 1]:
+                break
+
+        if np.allclose(x, x_new, atol=tol, rtol=0.):
+            break
+
+        x = x_new
+
+    return x
+
+def spectral_radius(A):
+    M = A.shape[0]
+    U = np.triu(A, k=1)
+    L = np.tril(A, k=-1)
+    D = np.zeros_like(A)
+    D.flat[0::M + 1] = np.diag(A)
+    T = np.linalg.inv(D) @ (L + U)
+    lambdas = np.linalg.eigvals(T)
+    rho = np.linalg.norm(np.max(lambdas))
+    return rho
+
+def save_to_hdf5(fn = "file", matrices = [], names = []):
+    hf = h5py.File(fn + '.h5', 'w')
+    for i in range(len(matrices)):
+        hf.create_dataset(names[i], data=matrices[i])
+        print(f"{names[i]} saved")
+
