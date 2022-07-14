@@ -705,7 +705,7 @@ def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1
     # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
     Q = np.linalg.solve(A, B)
 
-    return Q, rs
+    return Q, rs, A
 
 @numba.jit(nopython=True, parallel=True)
 def SCSM_jacobi_iter(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
@@ -746,6 +746,74 @@ def SCSM_jacobi_iter(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m
         x_new = np.zeros_like(x)
 
         for i in numba.prange(M):
+            if not A is None and not b is None:
+                a_i = A[i, :]
+                b_i = b[i]
+            else:
+                p1 = tri_points[i][0]
+                p2 = tri_points[i][1]
+                p3 = tri_points[i][2]
+                n = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+                a_i = a_fun(i, M, areas, r0, m, sig, omega, n)
+                b_i = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
+                # if it_count == 0:
+                #     A[i, :] = a_i
+                #     B[i] = b_i
+            a_ii = a_i[i]
+            s1 = np.dot(a_i[:i], x[:i])
+            s2 = np.dot(a_i[i + 1:], x[i + 1:])
+            x_new[i] = (b_i - s1 - s2) / a_ii
+            if x_new[i] == x_new[i - 1]:
+                break
+
+        # if np.allclose(x, x_new, atol=tol, rtol=0.):
+        if vnorm(x - x_new) < tol:
+            break
+
+        x = x_new
+
+    return x
+
+def SCSM_jacobi_iter_debug(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
+                          omega=1, n_iter=1000, tol=1e-15, A=None, b=None, initial_guess=False, verbose=False):
+
+    rs = tri_centers
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    def kroen(i, j):
+        return int(i == j)
+
+    def a_fun(i, M, areas, r0, m, sig, omega, n):
+
+        A_i = np.zeros(M, np.complex_)
+        for j in range(M):
+            A11 = np.dot((rs[i, :] - rs[j, :]), n)
+            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
+            A1 = A11 / A12
+            A_i[j] = A1
+        return A_i
+    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
+    x = np.zeros(M, np.complex_)
+    r_r0_norms = np.linalg.norm(rs - r0, axis=1)
+    r_norms = np.linalg.norm(rs, axis=1)
+    n = np.vstack((rs.T[0] / r_norms, rs.T[1] / r_norms, rs.T[2] / r_norms)).T
+    b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
+    a_ii = - ((1 / 2) + ((1j * omega * eps0) / sig)) / eps0 / areas
+    if initial_guess:
+        for i in range(M):
+            aii = eps0 * areas[i] / ((1 / 2) + ((1j * omega * eps0) / sig))
+            x[i] = 1j * omega * 1e-7 * aii * np.dot(np.cross(m, (rs[i] - r0)), rs[i]/vnorm(rs[i])) / (vnorm(rs[i] - r0) ** 3)
+
+    for it_count in range(n_iter):
+        # if it_count != 0 and verbose:
+        #     print("Iteration {0}: {1}".format(it_count, x))
+        x_new = np.zeros_like(x)
+
+        for i in range(M):
             if not A is None and not b is None:
                 a_i = A[i, :]
                 b_i = b[i]
