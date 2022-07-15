@@ -11,10 +11,10 @@ import multiprocessing.managers
 # path = os.path.realpath(Path("C:/Users/Besitzer/Downloads/Sphere_642"))
 # path = "Sphere_10242"
 # sizes = [10242, 1280]
-path = "Sphere_2964"
-sizes = [2964, 1280]
-# path = "Sphere_642"
-# sizes = [642, 1280]
+# path = "Sphere_2964"
+# sizes = [2964, 1280]
+path = "Sphere_642"
+sizes = [642, 1280]
 
 class MyManager(multiprocessing.managers.BaseManager):
     pass
@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     start = time.time()
 
-    res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-15, m=m, r0=r0)
+    res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-2, m=m, r0=r0)
     res = array_unflatten(res_flat, n_rows=n).T
     # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)
