@@ -123,6 +123,7 @@ def sphere_mesh(samples=1000, scaling=1):
 
     n = len(connections[0, :])
     triangle_points = np.zeros((n, 3, 3))
+    edge_lens = np.zeros(n)
     for i in range(n):
         p1 = locations[:, int(connections[0, i])]
         p2 = locations[:, int(connections[1, i])]
@@ -134,23 +135,16 @@ def sphere_mesh(samples=1000, scaling=1):
         triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
         line1_2 = p2 - p1
         line1_3 = p3 - p1
+        line2_3 = p3 - p2
         areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
         n_v[i] = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
-
-    return triangle_centers, areas, triangle_points, n_v
+        edge_lens[i] = 1/3*(np.linalg.norm(line1_2) + np.linalg.norm(line1_3) + np.linalg.norm(line2_3))
+    avg_lens = np.mean(edge_lens)
+    return triangle_centers, areas, triangle_points, n_v, avg_lens
 
 def read_mesh_from_hdf5(fn, mode="source"):
 
     if mode == "source":
-        source = True
-        target = False
-    elif mode == "target":
-        source = False
-        target = True
-    else:
-        raise ValueError("mode can only be 'source' or 'target'!")
-
-    if source:
         with h5py.File(fn, "r") as f:
             mesh_data = f['mesh']
             elm_number = np.array(f['mesh']['elm']['elm_number'])
@@ -160,22 +154,14 @@ def read_mesh_from_hdf5(fn, mode="source"):
             triangle_number_list = np.array(f['mesh']['elm']['triangle_number_list'])
             node_number = np.array(f['mesh']['nodes']['node_number'])
             node_coords = np.array(f['mesh']['nodes']['node_coord'])
-        # only consider white matter tissue for test evaluation
+        # only consider csf tissue for test evaluation
         tris_wm = triangle_number_list[np.where(tri_tissue_type == 1001)]
         tris_gm = triangle_number_list[np.where(tri_tissue_type == 1002)]
         tris_csf = triangle_number_list[np.where(tri_tissue_type == 1003)]
         points = tris_csf
-
-
-
         n = points.shape[0]
         triangle_centers = np.zeros([n, 3])
         areas = np.zeros(n)
-
-        # calculate centerpoints of trinagles from connections and vertexes
-        # center is (AB + BC + CA) / 3 starting from A
-        # for a flat trangle in space that should be (x1 + x2 + x3)/3, (y1 + y2 + y3)/3, (z1 + z2 + z3)/3
-        # for the area the formula is S = 1/2|AB x AC|, x is the crossproduct in this case
 
         triangle_points = np.zeros((n, 3, 3))
         for i in range(n):
@@ -190,16 +176,24 @@ def read_mesh_from_hdf5(fn, mode="source"):
             line1_2 = p2 - p1
             line1_3 = p3 - p1
             areas[i] = 0.5 * np.linalg.norm(np.cross(line1_2, line1_3))
-        # plot_mesh(node_coords.T, points.T, 0, n, centers=triangle_centers)
-        # ax1 = plt.axes(projection='3d')
-        # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
-
         return triangle_centers, areas, triangle_points
 
-    elif target:
+    elif mode == "target":
         with h5py.File(fn, "r") as f:
             triangle_centers = np.array(f['roi_surface']['midlayer_m1s1pmd']['tri_center_coord_mid'])
         return triangle_centers
+
+    elif mode == "coil":
+        with h5py.File(fn, "r") as f:
+            m = np.array(f['coil']['dipole_moment_mag'])
+            m_pos = np.array(f['coil']['dipole_position'])
+            transformation_matrix = np.array(f['info']['matsimnibs'])
+            sigmas = np.array((f['info']['sigma_WM'], f['info']['sigma_GM'],
+                               f['info']['sigma_CSF'], f['info']['sigma_Skull'],
+                               f['info']['sigma_Scalp']))
+        return m, m_pos, transformation_matrix, sigmas
+    else:
+        raise ValueError("mode can only be 'source' or 'target'!")
 
 def plot_mesh(locations, connections, n1, n2, centers=None):
     fig = plt.figure()
@@ -991,7 +985,7 @@ def SCSM_E_sphere_numba_polar(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0
 
 @numba.jit(nopython=True, parallel=True)
 def SCSM_E_sphere_numba_surf(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1,
-                        phi=np.zeros((10, 10)), near_field=False):
+                        phi=np.zeros((10, 10))):
     eps0 = 8.854187812813e-12
     I = phi.shape[0]
     J = theta.shape[0]
@@ -1017,6 +1011,123 @@ def SCSM_E_sphere_numba_surf(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=
             E[i, j] = vnorm(E_complex.imag)
     return E
 
+@numba.jit(nopython=True, parallel=True)
+def E_near_correction(E, Q, r_q, r_sphere, tri_points, theta, phi=np.zeros((10, 10)), n=0, r_near=3e-1):
+    eps0 = 8.854187812813e-12
+    I = phi.shape[0]
+    J = theta.shape[0]
+    E_new = np.zeros((phi.shape[0], theta.shape[0]))
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    def E_near(Q, p1, p2, p3, r):
+        """
+        Calculates the electric field norm of one charged triangular sheet
+        :param Q: Charge of the triangle
+        :param p1: point 1 of the triangle
+        :param p2: point 2 of the triangle
+        :param p3: point 3 of the triangle
+        :param r: vector where the electric field is evaluated
+        :return E: electric field norm at r
+        """
+        eps0 = 8.854187812813e-12
+        c = (1 / 3) * (p1 + p2 + p3)
+        A = np.linalg.norm(np.cross((p3 - p1), (p2 - p1))) / 2
+        n = np.cross((p3 - p1), (p2 - p3)) / (2 * A)
+        h = np.dot(n, (r - c))
+        p0 = r - (h * n)
+        r1, r2, r3 = np.linalg.norm(p1 - p0), np.linalg.norm(p2 - p0), np.linalg.norm(p3 - p0)
+        d1, d2, d3 = np.linalg.norm(p1 - r), np.linalg.norm(p2 - r), np.linalg.norm(p3 - r)
+        s12, s23, s31 = np.linalg.norm(p2 - p1), np.linalg.norm(p3 - p2), np.linalg.norm(p1 - p3)
+        D12, D23, D31 = np.dot(p1 - p0, p2 - p0), np.dot(p2 - p0, p3 - p0), np.dot(p3 - p0, p1 - p0)
+        c12, c23, c31 = np.dot(n, np.cross((p2 - p0), (p1 - p0))), np.dot(n, np.cross((p3 - p0), (p2 - p0))), \
+                        np.dot(n, np.cross((p1 - p0), (p3 - p0)))
+        D1 = h ** 2 * (r1 ** 2 + D23 - D12 - D31) - (c12 * c31)
+        D2 = h ** 2 * (r2 ** 2 + D31 - D23 - D12) - (c23 * c12)
+        D3 = h ** 2 * (r3 ** 2 + D12 - D31 - D23) - (c31 * c23)
+        N = -h * (c12 + c23 + c31)
+
+        k12x = np.array((0, p1[2] - p2[2], p2[1] - p1[1]))
+        k23x = np.array((0, p2[2] - p3[2], p3[1] - p2[1]))
+        k31x = np.array((0, p3[2] - p1[2], p1[1] - p3[1]))
+        k12y = np.array((p2[2] - p1[2], 0, p1[0] - p2[0]))
+        k23y = np.array((p3[2] - p2[2], 0, p2[0] - p3[0]))
+        k31y = np.array((p1[2] - p3[2], 0, p3[0] - p1[0]))
+        k12z = np.array((p1[1] - p2[1], p2[0] - p1[0], 0))
+        k23z = np.array((p2[1] - p3[1], p3[0] - p2[0], 0))
+        k31z = np.array((p3[1] - p1[1], p1[0] - p3[0], 0))
+        # f for x component
+        if s12 == 0 or s12 == d1 + d2:
+            f12x = 0
+        else:
+            f12x = np.dot(n, k12x) / s12 * np.log((d1 + d2 + s12) / (d1 + d2 - s12))
+        if s23 == 0 or s23 == d2 + d3:
+            f23x = 0
+        else:
+            f23x = np.dot(n, k23x) / s23 * np.log((d2 + d3 + s23) / (d2 + d3 - s23))
+        if s31 == 0 or s31 == d3 + d1:
+            f31x = 0
+        else:
+            f31x = np.dot(n, k31x) / s31 * np.log((d3 + d1 + s31) / (d3 + d1 - s31))
+        # f for y component
+        if s12 == 0 or s12 == d1 + d2:
+            f12y = 0
+        else:
+            f12y = np.dot(n, k12y) / s12 * np.log((d1 + d2 + s12) / (d1 + d2 - s12))
+        if s23 == 0 or s23 == d2 + d3:
+            f23y = 0
+        else:
+            f23y = np.dot(n, k23y) / s23 * np.log((d2 + d3 + s23) / (d2 + d3 - s23))
+        if s31 == 0 or s31 == d3 + d1:
+            f31y = 0
+        else:
+            f31y = np.dot(n, k31y) / s31 * np.log((d3 + d1 + s31) / (d3 + d1 - s31))
+        # f for z component
+        if s12 == 0 or s12 == d1 + d2:
+            f12z = 0
+        else:
+            f12z = np.dot(n, k12z) / s12 * np.log((d1 + d2 + s12) / (d1 + d2 - s12))
+        if s23 == 0 or s23 == d2 + d3:
+            f23z = 0
+        else:
+            f23z = np.dot(n, k23z) / s23 * np.log((d2 + d3 + s23) / (d2 + d3 - s23))
+        if s31 == 0 or s31 == d3 + d1:
+            f31z = 0
+        else:
+            f31z = np.dot(n, k31z) / s31 * np.log((d3 + d1 + s31) / (d3 + d1 - s31))
+        # perpendicular components
+        arc_tangent_sum = np.arctan2(D1, N * d1) + np.arctan2(D2, N * d2) + np.arctan2(D3, N * d3) + np.sign(h) * np.pi
+        arc_tangent_sum = np.arctan(D1 / (N * d1)) + np.arctan(D2 / (N * d2)) + np.arctan(D3 / (N * d3)) + np.sign(
+            h) * np.pi / 2
+        gx = - n[0] * arc_tangent_sum
+        gy = - n[1] * arc_tangent_sum
+        gz = - n[2] * arc_tangent_sum
+
+        Ex = f12x + f23x + f31x + gx
+        Ey = f12y + f23y + f31y + gy
+        Ez = f12z + f23z + f31z + gz
+
+        E = -Q / (A * 4 * np.pi * eps0) * np.array((Ex, Ey, Ez))
+        return E
+
+    for i in numba.prange(I):
+        for j in numba.prange(J):
+            phi_i = phi.T[0][i]
+            theta_j = theta[0][j]
+            x = r_sphere * np.sin(phi_i) * np.cos(theta_j)
+            y = r_sphere * np.sin(phi_i) * np.sin(theta_j)
+            z = r_sphere * np.cos(phi_i)
+            r_v = np.array((x, y, z))
+            E_1 = np.zeros(n)
+            E_2 = np.zeros(n)
+            for n in numba.prange(n):
+                if vnorm(r_v - r_q[n]) < r_near:
+                    E_1[n] = vnorm(Q[n].imag * (r_v - r_q[n]) / (4 * np.pi * eps0 * vnorm(r_v - r_q[n]) ** 3))
+                    E_2[n] = vnorm(E_near(Q[n], tri_points[n][0], tri_points[n][1], tri_points[n][2], r_v).imag)
+            E_prev = E[i, j]
+            E_new[i, j] = E_prev - E_1.sum() + E_2.sum()
+    return E_new
 
 def SCSM_E_sphere(Q, r_q, r_sphere, theta, m=np.array([0, 1, 0]), r0=np.array([0, 0, 1.1]), omega=1):
     eps0 = 8.854187812813e-12
