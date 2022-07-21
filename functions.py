@@ -17,7 +17,7 @@ import multiprocessing
 import multiprocessing.managers
 import fmm3dpy as fmm
 # from mpmath import fp
-import dask.array as da
+# import dask.array as da
 
 
 def read_sphere_mesh_from_txt(sizes, path):
@@ -716,8 +716,59 @@ def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1
 
 @numba.jit(nopython=True, parallel=True)
 def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
-                          omega=1, n_iter=1000, tol=1e-15, A=None, b=None, initial_guess=False, verbose=False):
+                          omega=1, n_iter=1000, tol=1e-15, A=None, b=None, initial_guess=False, b_im=None,
+                     calc_b=True, verbose=False):
 
+    rs = tri_centers
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    def v_vnorm(x):
+        x = x.T
+        return np.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2).T
+
+    x = np.zeros(M, np.complex_)
+    a_ii = - ((1 / 2) + ((1j * omega * eps0) / sig)) / eps0 / areas
+    f = 4 * np.pi * eps0
+    if initial_guess:
+        x = 1j * b_im / a_ii
+    for it_count in numba.prange(n_iter):
+        # if it_count != 0 and verbose:
+        #     print("Iteration {0}: {1}".format(it_count, x))
+        x_new = np.zeros_like(x)
+        for i in numba.prange(M):
+            if not A is None and not b is None:
+                a_i = A[i, :]
+                b_i = b[i]
+            else:
+                delta_r = rs[i] - rs
+                A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
+                A12 = f * v_vnorm(delta_r) ** 3
+                a_i = A11 / A12 + a_ii[i]
+                b_i = 1j * b_im[i]
+            s1 = np.dot(a_i[:i], x[:i])
+            s2 = np.dot(a_i[i + 1:], x[i + 1:])
+            x_new[i] = (b_i - s1 - s2) / a_ii[i]
+            if x_new[i] == x_new[i - 1]:
+                break
+        if vnorm(x - x_new) < tol:
+            break
+        x = x_new
+    return x
+
+def jacobi_vectors_numpy(tri_centers, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=1):
+    rs = tri_centers
+    r_r0_norms = np.linalg.norm(rs - r0, axis=1)
+    b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
+    return b_im
+
+
+def SCSM_jacobi_iter_debug(tri_centers, areas, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
+                          omega=1, n_iter=1000, tol=1e-15, A=None, b=None, initial_guess=False, b_im=None,
+                           verbose=False):
     rs = tri_centers
     M = rs.shape[0]
     eps0 = 8.854187812813e-12
@@ -735,10 +786,14 @@ def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1])
             A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
             A_i[j] = A11 / A12
         return A_i
-    b_im = np.zeros(M)
+
     x = np.zeros(M, np.complex_)
-    for i in numba.prange(M):
-        b_im[i] = omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n[i]) / (vnorm(rs[i] - r0) ** 3)
+
+    if not type(b_im) == np.ndarray:
+        b_im = np.zeros(M)
+        for i in numba.prange(M):
+            b_im[i] = omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n[i]) / (vnorm(rs[i] - r0) ** 3)
+
     a_ii = - ((1 / 2) + ((1j * omega * eps0) / sig)) / eps0 / areas
     if initial_guess:
         x = 1j * b_im / a_ii
@@ -763,93 +818,35 @@ def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1])
         x = x_new
     return x
 
-def SCSM_jacobi_iter_debug(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
-                          omega=1, n_iter=1000, tol=1e-15, A=None, b=None, initial_guess=False, verbose=False):
-
-    rs = tri_centers
-    M = rs.shape[0]
-    eps0 = 8.854187812813e-12
-
-    def vnorm(x):
-        return np.linalg.norm(x)
-
-    def kroen(i, j):
-        return int(i == j)
-
-    def a_fun(i, M, n):
-        A_i = np.zeros(M, np.complex_)
-        for j in range(M):
-            A11 = np.dot((rs[i, :] - rs[j, :]), n[i])
-            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
-            A_i[j] = A11 / A12
-        return A_i
-    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
-    b_im = np.zeros(M)
-    x = np.zeros(M, np.complex_)
-    # r_r0_norms = np.linalg.norm(rs - r0, axis=1)
-    # r_norms = np.linalg.norm(rs, axis=1)
-    # n = - np.vstack((rs.T[0] / r_norms, rs.T[1] / r_norms, rs.T[2] / r_norms)).T
-    for i in range(M):
-        b_im[i] = omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n[i]) / (vnorm(rs[i] - r0) ** 3)
-    # b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
-    a_ii = - ((1 / 2) + ((1j * omega * eps0) / sig)) / eps0 / areas
-    if initial_guess:
-        x = 1j*b_im/a_ii
-
-    for it_count in range(n_iter):
-        # if it_count != 0 and verbose:
-        #     print("Iteration {0}: {1}".format(it_count, x))
-        x_new = np.zeros_like(x)
-
-        for i in range(M):
-            if not A is None and not b is None:
-                a_i = A[i, :]
-                b_i = b[i]
-            else:
-                a_i = a_fun(i, M, n)
-                b_i = 1j * b_im[i]
-            s1 = np.dot(a_i[:i], x[:i])
-            s2 = np.dot(a_i[i + 1:], x[i + 1:])
-            x_new[i] = (b_i - s1 - s2) / a_ii[i]
-            if x_new[i] == x_new[i - 1]:
-                break
-
-        if vnorm(x - x_new) < tol:
-            break
-
-        x = x_new
-
-    return x
-
-def SCSM_tri_sphere_dask(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
-    rs = tri_centers
-    M = rs.shape[0]
-    A = da.zeros((M, M), dtype=complex)
-    B = da.zeros(M, dtype=complex)
-    eps0 = 8.854187812813e-12
-
-    def vnorm(x):
-        return np.linalg.norm(x)
-
-    def kroen(i, j):
-        return int(i == j)
-
-    for i in range(M):
-        r_norm_i = rs[i] / vnorm(rs[i])
-        p1 = tri_points[i][0]
-        p2 = tri_points[i][1]
-        p3 = tri_points[i][2]
-        n = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
-        for j in range(M):
-            A11 = np.dot((rs[i, :] - rs[j, :]), n)
-            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
-            A1 = A11 / A12
-            A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
-            A[i, j] = A1 - A2
-        B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
-    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
-    Q = da.linalg.solve(A, B)
-    return Q.compute(), rs
+# def SCSM_tri_sphere_dask(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
+#     rs = tri_centers
+#     M = rs.shape[0]
+#     A = da.zeros((M, M), dtype=complex)
+#     B = da.zeros(M, dtype=complex)
+#     eps0 = 8.854187812813e-12
+#
+#     def vnorm(x):
+#         return np.linalg.norm(x)
+#
+#     def kroen(i, j):
+#         return int(i == j)
+#
+#     for i in range(M):
+#         r_norm_i = rs[i] / vnorm(rs[i])
+#         p1 = tri_points[i][0]
+#         p2 = tri_points[i][1]
+#         p3 = tri_points[i][2]
+#         n = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+#         for j in range(M):
+#             A11 = np.dot((rs[i, :] - rs[j, :]), n)
+#             A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
+#             A1 = A11 / A12
+#             A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
+#             A[i, j] = A1 - A2
+#         B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
+#     # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
+#     Q = da.linalg.solve(A, B)
+#     return Q.compute(), rs
 
 
 def Q_parallel(idxs, A, B, rs, r0, m, areas, eps0, omega, sig, M):
@@ -1504,3 +1501,22 @@ def save_to_hdf5(fn = "file", matrices = [], names = []):
         hf.create_dataset(names[i], data=matrices[i])
         print(f"{names[i]} saved")
 
+
+def read_ccd(data_path, fn):
+    ccd_file = os.path.join(data_path, fn)
+    with open(ccd_file) as f:
+        lines = f.readlines()
+
+    f.close()
+
+    lines = [i.replace(" ", ", ") for i in lines]
+    lines = [i.replace(", \n", "") for i in lines]
+    lines = [i.replace("'", "") for i in lines]
+    lines = [i.split(",") for i in lines[2:]]
+    for j in range(len(lines)):
+        lines[j] = [float(i) for i in lines[j]]
+
+    data = np.asarray(lines)
+    r0 = data[:3]
+    m = data[3:]
+    return r0, m

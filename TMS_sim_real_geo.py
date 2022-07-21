@@ -19,6 +19,8 @@ path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
 # path = os.path.realpath(Path("C:/Users/User/Downloads"))
 fn = os.path.join(path, "15484.08.hdf5")
 fn2 = os.path.join(path, "e.hdf5")
+fn3 = "MagVenture_MCF_B65_REF_highres.ccd"
+
 
 start = time.time()
 time_0 = start

@@ -48,7 +48,7 @@ print(f"{t[0]:.2f}" + t[1] + " receprocity")
 start = time.time()
 # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
 # tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
-tc, areas, tri_points, n_v, avg_len = sphere_mesh(500, scaling=scaling_factor)
+tc, areas, tri_points, n_v, avg_len = sphere_mesh(1000, scaling=scaling_factor)
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " triangulation")
@@ -62,7 +62,7 @@ print(f"elements: {n_elements}")
 # print(f"{t[0]:.2f}" + t[1] + "  Q linalg.solve()")
 
 start = time.time()
-Q = SCSM_jacobi_iter(tc, tri_points, areas, n=n_v, r0=r0, m=m, tol=1e-2, initial_guess=True)
+Q = SCSM_jacobi_iter_debug(tc, tri_points, areas, n=n_v, r0=r0, m=m, tol=1e-2, initial_guess=False)
 rs = tc
 end = time.time()
 t = t_format(end - start)
@@ -80,12 +80,12 @@ end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + "  E calculation")
 
-start = time.time()
-res3 = E_near_correction(E=res, Q=Q, r_q=rs, r_sphere=r, tri_points=tri_points, theta=theta, phi=phi, n=n_elements,
-                         r_near=3*avg_len)
-end = time.time()
-t = t_format(end - start)
-print(f"{t[0]:.2f}" + t[1] + "  E correction")
+# start = time.time()
+# res3 = E_near_correction(E=res, Q=Q, r_q=rs, r_sphere=r, tri_points=tri_points, theta=theta, phi=phi, n=n_elements,
+#                          r_near=3*avg_len)
+# end = time.time()
+# t = t_format(end - start)
+# print(f"{t[0]:.2f}" + t[1] + "  E correction")
 
 time_last = end
 t = t_format(end - time_0)
@@ -95,14 +95,14 @@ res2 = res.copy()
 
 diff = np.abs(res1 - res2)
 relative_diff = diff / np.linalg.norm(res1)
-diff2 = np.abs(res1 - res3)
-relative_diff2 = diff2 / np.linalg.norm(res1)
+# diff2 = np.abs(res1 - res3)
+# relative_diff2 = diff2 / np.linalg.norm(res1)
 #
 rerror_imag = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
-rerror_imag2 = np.linalg.norm(diff2) * 100 / np.linalg.norm(res1)
+# rerror_imag2 = np.linalg.norm(diff2) * 100 / np.linalg.norm(res1)
 
 print(f"relative error: {rerror_imag:.7f}%")
-print(f"relative error with near field: {rerror_imag2:.7f}%")
+# print(f"relative error with near field: {rerror_imag2:.7f}%")
 
 # functions.plot_E_sphere_surf(res, phi, theta, r)
 # plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.coolwarm)

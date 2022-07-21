@@ -23,33 +23,38 @@ t_jacobi = []
 errors = []
 
 compare = False
-
-for j in range(2):
-    if j == 0:
-        ig = False
-        print("--------no initial guess---------")
-    elif j == 1:
-        ig = True
-        print("--------with initial guess---------")
-    for i in range(len(samples)):
-
+for i in range(len(samples)):
+    for j in range(1):
 
         res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface")
-        tc, areas, tri_points, n_v = sphere_mesh(samples[i], scaling=scaling_factor)
-        print(f"elements: {tc.shape[0]}")
+        tc, areas, tri_points, n_v = sphere_mesh(samples[i], scaling=scaling_factor)[:4]
 
-        if compare:
-            start = time.time()
-            Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
-            end = time.time()
-            t = t_format(end - start)
-            t_numpy.append(t)
-            print(f"{t[0]:.2f}" + t[1] + "  Q linalg.solve()")
-        else:
-            rs = tc
+        if j == 0:
+            ig = False
+            print(f"elements: {tc.shape[0]}")
+            print("--------no initial guess---------")
+
+            if compare:
+                start = time.time()
+                Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
+                end = time.time()
+                t = t_format(end - start)
+                t_numpy.append(t)
+                print(f"{t[0]:.2f}" + t[1] + "  Q linalg.solve()")
+            else:
+                rs = tc
+        elif j == 1:
+            ig = True
+            print("--------with initial guess---------")
 
         start = time.time()
-        Q = SCSM_jacobi_iter(tc, tri_points, areas, n=n_v, r0=r0, m=m, tol=1e-2, initial_guess=ig)
+        start_sub = start
+        b_im = jacobi_vectors_numpy(tc, n_v, r0, m)
+        end_sub = time.time()
+        t_sub = t_format(end_sub - start_sub)
+        print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
+        Q = SCSM_jacobi_iter(tc, tri_points, areas, n=n_v, r0=r0, m=m, tol=1e-12, initial_guess=ig, n_iter=20,
+                             b_im=b_im, calc_b=False)
         end = time.time()
         t = t_format(end - start)
         print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
