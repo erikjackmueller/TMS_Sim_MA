@@ -16,6 +16,9 @@ import time
 import multiprocessing
 import multiprocessing.managers
 import fmm3dpy as fmm
+import cupy as cp
+from numba import cuda
+import cupyx
 # from mpmath import fp
 # import dask.array as da
 
@@ -747,7 +750,7 @@ def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1])
                 delta_r = rs[i] - rs
                 A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
                 A12 = f * v_vnorm(delta_r) ** 3
-                a_i = A11 / A12 + a_ii[i]
+                a_i = A11 / A12 + 1e-25j
                 b_i = 1j * b_im[i]
             s1 = np.dot(a_i[:i], x[:i])
             s2 = np.dot(a_i[i + 1:], x[i + 1:])
@@ -758,6 +761,80 @@ def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1])
             break
         x = x_new
     return x
+
+def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig=0.33, omega=1, n_iter=1000, tol=1e-15, verbose=False):
+
+    rs = cp.asarray(tri_centers, dtype='float32')
+    areas = cp.asarray(areas, dtype='float32')
+    n = cp.asarray(n, dtype='float32')
+    b_im = cp.asarray(b_im, dtype='float32')
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+
+    def vnorm(x):
+        return cp.linalg.norm(x)
+
+    def v_vnorm(x):
+        x = x.T
+        return cp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2).T
+
+    x = cp.zeros(M, dtype='complex64')
+    a_ii = - ((1 / 2) + ((1j * omega * eps0) / sig)) / eps0 / areas
+    f = 4 * cp.pi * eps0
+    for _ in numba.prange(n_iter):
+        x_new = cp.zeros_like(x)
+        for i in numba.prange(M):
+            delta_r = rs[i] - rs
+            A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
+            A12 = f * v_vnorm(delta_r) ** 3
+            a_i = A11 / A12 + 1e-25j
+            b_i = 1j * b_im[i]
+            s1 = cp.dot(a_i[:i], x[:i])
+            s2 = cp.dot(a_i[i + 1:], x[i + 1:])
+            x_new[i] = (b_i - s1 - s2) / a_ii[i]
+        if vnorm(x - x_new) < tol:
+            break
+        x = x_new
+    x_numpy = x.get()
+    return x_numpy
+
+def jac_t(tri_centers, areas, n, b_im, M, x, x_new, sig, omega, n_iter, tol):
+    f = partial(SCSM_jacobi_iter_cupy_test, xp=cp)
+    return f(tri_centers, areas, n, b_im, M, x, x_new, sig, omega, n_iter, tol)
+
+def SCSM_jacobi_iter_cupy_test(man, tri_centers, areas, n, b_im, M, sig, omega, n_iter, tol):
+
+    x = man.np_zeros([M], dtype=np.complex_)
+    x_new = man.np_zeros([M], dtype=np.complex_)
+    rs = tri_centers
+    eps0 = 8.854187812813e-12
+    a_ii = - ((1 / 2) + ((1j * omega * eps0) / sig)) / eps0 / areas
+    f = 4 * cp.pi * eps0
+    multiprocessing.set_start_method('spawn', force=True)
+    mp_loop = partial(jac_inner_loop, rs=rs, n=n, b_im=b_im, a_ii=a_ii, f=f, x=x, x_new=x_new)
+    partial(jac_inner_loop, xp=cp)
+    idx_list_chunks = compute_chunks(list(np.arange(M)), 8)
+    for it_count in range(n_iter):
+        pool = multiprocessing.Pool(processes=8)
+        pool.map(mp_loop, idx_list_chunks)
+        pool.close()
+        if np.linalg.norm(x - x_new) < tol:
+            break
+        x = x_new
+    return x
+
+def jac_inner_loop(rs, n, b_im, a_ii, f, x, x_new, idxs):
+    for k in range(len(idxs)):
+        i = idxs[k]
+        delta_r = rs[i] - rs
+        A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
+        v_vnorm_delta_r = cp.sqrt(delta_r.T[0] ** 2 + delta_r.T[1] ** 2 + delta_r.T[2] ** 2).T
+        A12 = f * v_vnorm_delta_r ** 3
+        a_i = A11 / A12 + 1e-25j
+        b_i = 1j * b_im[i]
+        s1 = cp.dot(a_i[:i], x[:i])
+        s2 = cp.dot(a_i[i + 1:], x[i + 1:])
+        x_new[i] = (b_i - s1 - s2) / a_ii[i]
 
 def jacobi_vectors_numpy(tri_centers, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=1):
     rs = tri_centers
@@ -772,6 +849,27 @@ def SCSM_jacobi_iter_debug(tri_centers, areas, n, r0=np.array([0, 0, 1.1]), m=np
     rs = tri_centers
     M = rs.shape[0]
     eps0 = 8.854187812813e-12
+
+    def diff(x, y, xlen):
+        for i in range(xlen):
+            for j in range(3):
+                x[i][j] = y[j] - x[i][j]
+        return x
+
+    def multiply(x, y, xlen):
+        for i in range(xlen):
+            x[i] = y * x[i]
+        return x
+
+    def dot(x, y, xlen):
+        for i in range(xlen):
+            x[i] = y[i] * x[i]
+        return x
+
+    def div(x):
+        for i in range(x.shape[0]):
+            x[i] = 1/x[i]
+        return x
 
     def vnorm(x):
         return np.linalg.norm(x)
@@ -808,6 +906,14 @@ def SCSM_jacobi_iter_debug(tri_centers, areas, n, r0=np.array([0, 0, 1.1]), m=np
             else:
                 a_i = a_fun(i, M, n)
                 b_i = 1j * b_im[i]
+
+            r = rs
+            delta_r = diff(r, r[i], r.shape[0])
+            dr0 = delta_r.T[0]
+            dr1 = delta_r.T[1]
+            dr2 = delta_r.T[2]
+            A11 = multiply(dr0, n[i][0], dr0.shape[0]) + multiply(dr1, n[i][1], dr0.shape[0]) + multiply(dr2, n[i][2],
+                                                                                                         dr0.shape[0])
             s1 = np.dot(a_i[:i], x[:i])
             s2 = np.dot(a_i[i + 1:], x[i + 1:])
             x_new[i] = (b_i - s1 - s2) / a_ii[i]
@@ -817,6 +923,197 @@ def SCSM_jacobi_iter_debug(tri_centers, areas, n, r0=np.array([0, 0, 1.1]), m=np
             break
         x = x_new
     return x
+
+def Q_jacobi_numba_cuda(tc, areas, n_v, b_im, sig=0.33, omega=1, tol=1e-10, n_iter=20):
+    x = cuda.to_device(np.zeros(tc.shape[0], dtype=np.complex_))
+    out = np.zeros(tc.shape[0], dtype=np.complex_)
+    areas = areas + 0j
+    a_ic = cuda.to_device(np.zeros(tc.shape[0], dtype=np.complex_))
+    x_new = cuda.to_device(np.zeros(tc.shape[0], dtype=np.complex_))
+    r_cu = cuda.to_device(tc + 0j)
+    a_cu = cuda.to_device(areas + 0j)
+    n_cu = cuda.to_device(n_v + 0j)
+    b_comp = 1j*b_im
+    b_cu = cuda.to_device(b_comp)
+    threadsperblock = 32
+    blockspergrid = (tc.shape[0] + (threadsperblock - 1)) // threadsperblock
+    jac_cu[blockspergrid, threadsperblock](r_cu, a_cu, n_cu, b_cu, a_ic, sig, omega, tol, n_iter, x, x_new, out)
+    # cuda.synchronize()
+    return out
+
+@cuda.jit()
+def jac_cu(r, areas, n, b_im, aic, sig, omega, tol, n_iter, x, x_new, out):
+
+    def diff(x, y, xlen):
+        for i in range(xlen):
+            for j in range(3):
+                x[i][j] = y[j] - x[i][j]
+        return x
+
+    def multiply(x, y, xlen):
+        for i in range(xlen):
+            x[i] = y * x[i]
+        return x
+
+    def dot(x, y, xlen):
+        sum = 0
+        for i in range(xlen):
+            #dot-product
+            sum += y[i] * x[i]
+        return sum
+
+    def div(x):
+        for i in range(x.shape[0]):
+            x[i] = 1/x[i]
+        return x
+
+    def div2(x, y, xlen):
+        for i in range(xlen):
+            x[i] = x[i] / y[i]
+        return x
+
+    def sum(x, y):
+        for i in range(x.shape[0]):
+            x[i] = x[i] + y[i]
+        return x
+
+    def pow(x, y):
+        for i in range(x.shape[0]):
+            x[i] = x[i] ** y
+        return x
+
+    def vdiv(x, y):
+        for i in range(x.shape[0]):
+            if not y[i] == 0:
+                x[i] = x[i] / y[i]
+        return x
+
+    def vdiff(x, y, xlen):
+        for i in range(xlen):
+            x[i] = x[i] - y[i]
+        return x
+
+    start = cuda.grid(1)
+    stride = cuda.gridsize(1)
+
+    M = r.shape[0]
+    eps0 = 8.854187812813e-12
+    a_factor = - ((1 / 2) + ((1j * omega * eps0) / sig)) * (1 / eps0)
+    a_areas = div(areas)
+    a_ii = multiply(a_areas, a_factor, a_areas.shape[0])
+    # a_ii = - ((1 / 2) + ((1j * omega * eps0) / sig)) / eps0 * div(areas)
+    f = 4 * np.pi * eps0
+    xlen = M
+    for _ in range(n_iter):
+        for i in range(start, M, stride):
+            delta_r = diff(r, r[i], r.shape[0])
+            dr0 = delta_r.T[0]
+            dr1 = delta_r.T[1]
+            dr2 = delta_r.T[2]
+            drn0 = multiply(dr0, n[i][0], dr0.shape[0])
+            drn1 = multiply(dr1, n[i][1], dr1.shape[0])
+            drn2 = multiply(dr2, n[i][2], dr2.shape[0])
+            A11 = sum(sum(drn0, drn1), drn2)
+            A12 = pow((pow(sum(sum(pow(delta_r[0], 2), pow(delta_r[1], 2)), pow(delta_r[2], 2)), 0.5)).T, 3)
+            A_12 = multiply(A12, f, dr0.shape[0])
+            a_i = vdiv(A11, A_12)
+            b_i = b_im[i]
+            s1 = dot(a_i[:i], x[:i], a_i[:i].shape[0])
+            s2 = dot(a_i[i + 1:], x[i + 1:], a_i[i + 1:].shape[0])
+            s3 = (b_i - s1 - s2)
+            s4 = 1 / a_ii[i]
+            x_new[i] = s3 / s4
+        x_diff = vdiff(x, x_new, xlen)
+        x_norm = (x_diff[0] ** 2 + x_diff[1] ** 2 + x_diff[2] ** 2) ** 0.5
+        if x_norm.imag < tol:
+            break
+        x = x_new
+    out = x
+
+
+# @cp.fuse
+# def jac_cu2(r, areas, n, b_im, sig, omega, M, tol, n_iter, x, x_new):
+#
+#     def diff(x, y, xlen):
+#         for i in range(xlen):
+#             for j in range(3):
+#                 x[i][j] = y[j] - x[i][j]
+#         return x
+#
+#     def multiply(x, y, xlen):
+#         for i in range(xlen):
+#             x[i] = y * x[i]
+#         return x
+#
+#     def dot(x, y, xlen):
+#         sum = 0
+#         for i in range(xlen):
+#             #dot-product
+#             sum += y[i] * x[i]
+#         return sum
+#
+#     def div(x):
+#         for i in range(x.shape[0]):
+#             x[i] = 1/x[i]
+#         return x
+#
+#     def div2(x, y, xlen):
+#         for i in range(xlen):
+#             x[i] = x[i] / y[i]
+#         return x
+#
+#     def sum(x, y):
+#         for i in range(xlen):
+#             x[i] = x[i] + y[i]
+#         return x
+#
+#     def pow(x, y, xlen):
+#         for i in range(xlen):
+#             x[i] = x[i] ** y
+#         return x
+#
+#     def vdiv(x, y, xlen):
+#         for i in range(xlen):
+#             if not y[i] == 0:
+#                 x[i] = x[i] / y[i]
+#         return x
+#
+#     def vdiff(x, y, xlen):
+#         for i in range(xlen):
+#             x[i] = x[i] - y[i]
+#         return x
+#
+#     eps0 = 8.854187812813e-12
+#     xlen = M
+#     a_factor = - ((1 / 2) + ((1j * omega * eps0) / sig)) * (1 / eps0)
+#     a_areas = div(areas)
+#     a_ii = multiply(a_areas, a_factor, xlen)
+#     f = 4 * np.pi * eps0
+#     for _ in range(n_iter):
+#         for i in range(M):
+#             delta_r = diff(r, r[i], xlen)
+#             dr0 = delta_r.T[0]
+#             dr1 = delta_r.T[1]
+#             dr2 = delta_r.T[2]
+#             drn0 = multiply(dr0, n[i][0], xlen)
+#             drn1 = multiply(dr1, n[i][1], xlen)
+#             drn2 = multiply(dr2, n[i][2], xlen)
+#             A11 = sum(sum(drn0, drn1), drn2)
+#             A12 = pow((pow(sum(sum(pow(delta_r[0], 2), pow(delta_r[1], 2)), pow(delta_r[2], 2)), 0.5)).T, 3)
+#             A_12 = multiply(A12, f, xlen)
+#             a_i = vdiv(A11, A_12)
+#             b_i = b_im[i]
+#             s1 = dot(a_i[:i], x[:i], xlen)
+#             s2 = dot(a_i[i + 1:], x[i + 1:], xlen)
+#             s3 = (b_i - s1 - s2)
+#             s4 = 1 / a_ii[i]
+#             x_new[i] = s3 / s4
+#         x_diff = vdiff(x, x_new, xlen)
+#         x_norm = (x_diff[0] ** 2 + x_diff[1] ** 2 + x_diff[2] ** 2) ** 0.5
+#         if x_norm.imag < tol:
+#             break
+#         x = x_new
+#     return x
 
 # def SCSM_tri_sphere_dask(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
 #     rs = tri_centers

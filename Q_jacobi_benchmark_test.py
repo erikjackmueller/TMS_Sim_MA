@@ -2,7 +2,15 @@ from functions import*
 import numpy as np
 import time
 import matplotlib
+import datetime
+from cupyx import optimizing
 matplotlib.use("TkAgg")
+import multiprocessing.managers
+
+# class MyManager(multiprocessing.managers.BaseManager):
+#     pass
+# MyManager.register('np_zeros', np.zeros, multiprocessing.managers.ArrayProxy)
+# man = MyManager()
 
 n = 100
 scaling_factor = 1
@@ -17,35 +25,38 @@ r0 = 1.05 * d_norm * scaling_factor
 m = d_norm
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 
-samples = [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 500000]
+# samples = [5000, 10000, 20000, 50000, 100000, 250000, 850000]
+samples = [50000, 100000, 250000, 850000]
 t_numpy = []
 t_jacobi = []
 errors = []
-
 compare = False
-for i in range(len(samples)):
-    for j in range(1):
 
-        res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface")
+res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface")
+
+# if __name__ == "__main__":
+for i in range(len(samples)):
+
         tc, areas, tri_points, n_v = sphere_mesh(samples[i], scaling=scaling_factor)[:4]
 
-        if j == 0:
-            ig = False
-            print(f"elements: {tc.shape[0]}")
-            print("--------no initial guess---------")
+        ig = False
+        # print("--------no initial guess---------")
+        print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        print(f"elements: {tc.shape[0]}")
+        n_elem = tc.shape[0]
 
-            if compare:
-                start = time.time()
-                Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
-                end = time.time()
-                t = t_format(end - start)
-                t_numpy.append(t)
-                print(f"{t[0]:.2f}" + t[1] + "  Q linalg.solve()")
-            else:
-                rs = tc
-        elif j == 1:
-            ig = True
-            print("--------with initial guess---------")
+        if compare:
+            start = time.time()
+            Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
+            end = time.time()
+            t = t_format(end - start)
+            t_numpy.append(t)
+            print(f"{t[0]:.2f}" + t[1] + "  Q linalg.solve()")
+        else:
+            rs = tc
+        # elif j == 1:
+        #     ig = True
+        #     print("--------with initial guess---------")
 
         start = time.time()
         start_sub = start
@@ -53,8 +64,22 @@ for i in range(len(samples)):
         end_sub = time.time()
         t_sub = t_format(end_sub - start_sub)
         print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
-        Q = SCSM_jacobi_iter(tc, tri_points, areas, n=n_v, r0=r0, m=m, tol=1e-12, initial_guess=ig, n_iter=20,
-                             b_im=b_im, calc_b=False)
+        Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
+        # Q = SCSM_jacobi_iter_debug(tc, areas, n=n_v, r0=r0, m=m, tol=1e-10, initial_guess=ig, n_iter=20,
+        #                      b_im=b_im)
+
+        # jac = cp.vectorize(SCSM_jacobi_iter_cupy_test)
+        # Q = jac(cp.asarray(tc), cp.asarray(areas), cp.asarray(n_v), cp.asarray(b_im), n_elem,
+        #         cp.zeros(n_elem, cp.complex_), cp.zeros(n_elem, cp.complex_), 0.33, 1, 20, 1e-10)
+        # if i == 0:
+        #     man.start()
+        # Q = SCSM_jacobi_iter_cupy_test(man, cp.asarray(tc), cp.asarray(areas), cp.asarray(n_v),
+        #                                cp.asarray(b_im), n_elem, 0.33, 1, 20, 1e-10)
+        # with optimizing.optimize():
+        #     Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
+        # jac_cupy_vec = cp.vectorize(SCSM_jacobi_iter_cupy)
+        # Q = jac_cupy_vec(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
+        # Q = Q_jacobi_numba_cuda(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
         end = time.time()
         t = t_format(end - start)
         print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
@@ -69,7 +94,7 @@ for i in range(len(samples)):
         rerror_imag = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
         print(f"relative error: {rerror_imag:.7f}%")
         errors.append(rerror_imag)
-
+        print("---------------------------")
 
 
 
