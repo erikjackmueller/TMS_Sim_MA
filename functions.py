@@ -18,7 +18,7 @@ import multiprocessing.managers
 import fmm3dpy as fmm
 import cupy as cp
 from numba import cuda
-import cupyx
+# import cupyx
 # from mpmath import fp
 # import dask.array as da
 
@@ -161,10 +161,12 @@ def read_mesh_from_hdf5(fn, mode="source"):
         tris_wm = triangle_number_list[np.where(tri_tissue_type == 1001)]
         tris_gm = triangle_number_list[np.where(tri_tissue_type == 1002)]
         tris_csf = triangle_number_list[np.where(tri_tissue_type == 1003)]
-        points = tris_csf
+        tri_tissue_type = tri_tissue_type[np.where(tri_tissue_type < 1004)]
+        points = triangle_number_list[np.where(tri_tissue_type < 1004)]
         n = points.shape[0]
         triangle_centers = np.zeros([n, 3])
         areas = np.zeros(n)
+        n_v = np.zeros_like(triangle_centers)
 
         triangle_points = np.zeros((n, 3, 3))
         for i in range(n):
@@ -179,7 +181,8 @@ def read_mesh_from_hdf5(fn, mode="source"):
             line1_2 = p2 - p1
             line1_3 = p3 - p1
             areas[i] = 0.5 * np.linalg.norm(np.cross(line1_2, line1_3))
-        return triangle_centers, areas, triangle_points
+            n_v[i] = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+        return triangle_centers, areas, triangle_points, n_v, tri_tissue_type
 
     elif mode == "target":
         with h5py.File(fn, "r") as f:
@@ -191,10 +194,10 @@ def read_mesh_from_hdf5(fn, mode="source"):
             m = np.array(f['coil']['dipole_moment_mag'])
             m_pos = np.array(f['coil']['dipole_position'])
             transformation_matrix = np.array(f['info']['matsimnibs'])
-            sigmas = np.array((f['info']['sigma_WM'], f['info']['sigma_GM'],
-                               f['info']['sigma_CSF'], f['info']['sigma_Skull'],
-                               f['info']['sigma_Scalp']))
-        return m, m_pos, transformation_matrix, sigmas
+            sigmas = np.array((np.array(f['info']['sigma_WM']), np.array(f['info']['sigma_GM']),
+                               np.array(f['info']['sigma_CSF']), np.array(f['info']['sigma_Skull']),
+                               np.array(f['info']['sigma_Scalp'])))
+        return transformation_matrix, sigmas
     else:
         raise ValueError("mode can only be 'source' or 'target'!")
 
@@ -1817,3 +1820,23 @@ def read_ccd(data_path, fn):
     r0 = data[:3]
     m = data[3:]
     return r0, m
+
+def read_from_ccd(data_path):
+
+    ccd_file = os.path.join(data_path, 'MagVenture_MCF_B65_REF_highres.ccd')
+    with open(ccd_file) as f:
+        lines = f.readlines()
+
+    f.close()
+
+    lines = [i.replace(" ", ", ") for i in lines]
+    lines = [i.replace(", \n", "") for i in lines]
+    lines = [i.replace("'", "") for i in lines]
+    lines = [i.split(",") for i in lines[2:]]
+    for j in range(len(lines)):
+        lines[j] = [float(i) for i in lines[j]]
+
+    data = np.asarray(lines)
+    m_pos = data[:, :3]
+    m = data[:, -1]
+    return m, m_pos
