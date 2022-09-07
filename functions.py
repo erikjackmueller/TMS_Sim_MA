@@ -161,8 +161,8 @@ def read_mesh_from_hdf5(fn, mode="source"):
         tris_wm = triangle_number_list[np.where(tri_tissue_type == 1001)]
         tris_gm = triangle_number_list[np.where(tri_tissue_type == 1002)]
         tris_csf = triangle_number_list[np.where(tri_tissue_type == 1003)]
-        tri_tissue_type = tri_tissue_type[np.where(tri_tissue_type < 1004)]
-        points = triangle_number_list[np.where(tri_tissue_type < 1004)]
+        tri_tissue_type = tri_tissue_type#[np.where(tri_tissue_type < 1004)]
+        points = triangle_number_list#[np.where(tri_tissue_type < 1004)]
         n = points.shape[0]
         triangle_centers = np.zeros([n, 3])
         areas = np.zeros(n)
@@ -771,6 +771,7 @@ def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig=0.33, omega=1, n_iter
     areas = cp.asarray(areas, dtype='float32')
     n = cp.asarray(n, dtype='float32')
     b_im = cp.asarray(b_im, dtype='float32')
+    sig = cp.asarray(sig, dtype='float32')
     M = rs.shape[0]
     eps0 = 8.854187812813e-12
 
@@ -839,10 +840,32 @@ def jac_inner_loop(rs, n, b_im, a_ii, f, x, x_new, idxs):
         s2 = cp.dot(a_i[i + 1:], x[i + 1:])
         x_new[i] = (b_i - s1 - s2) / a_ii[i]
 
-def jacobi_vectors_numpy(tri_centers, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=1):
+
+def jacobi_vectors_numpy(tri_centers, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=1, m_pos=0):
+
     rs = tri_centers
-    r_r0_norms = np.linalg.norm(rs - r0, axis=1)
-    b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
+    if type(m_pos) == np.ndarray:
+        bs = np.zeros((rs.shape[0], m.shape[0]))
+        for i in range(m.shape[0]):
+            r_r0_norms = np.linalg.norm(rs - m_pos[i], axis=1)
+            bs[:, i] = omega * 1e-7 * np.divide(np.sum(np.cross(m[i], (rs - m_pos[i])) * n, axis=1), (np.power(r_r0_norms, 3)))
+        b_im = np.sum(bs, axis=1)
+    else:
+        r_r0_norms = np.linalg.norm(rs - r0, axis=1)
+        b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
+    return b_im
+
+def vector_potential_for_E(rs, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=1, m_pos=0):
+
+    if type(m_pos) == np.ndarray:
+        bs = np.zeros((rs.shape[0], m.shape[0]))
+        for i in range(m.shape[0]):
+            r_r0_norms = np.linalg.norm(rs - m_pos[i], axis=1)
+            bs[:, i] = omega * 1e-7 * np.divide(np.sum(np.cross(m[i], (rs - m_pos[i])), axis=1), (np.power(r_r0_norms, 3)))
+        b_im = np.sum(bs, axis=1)
+    else:
+        r_r0_norms = np.linalg.norm(rs - r0, axis=1)
+        b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)), axis=1), (np.power(r_r0_norms, 3)))
     return b_im
 
 
@@ -1199,6 +1222,18 @@ def SCSM_FMM_E(Q, r_source, r_target, eps, m=np.array([0, 1, 0]), r0=np.array([0
     for i in range(n):
                 r_v = r_target[i]
                 E_v = grad_phi[i] - (omega * 1e-7) * (np.cross(m, (r_v - r0))) / (vnorm(r_v - r0) ** 3)
+                E[i] = vnorm(E_v)
+    return E
+
+def SCSM_FMM_E2(Q, r_source, r_target, eps, b_im):
+    eps0 = 8.854187812813e-12
+    n = r_target.shape[0]
+    E = np.zeros(n)
+    charges = Q.imag
+    fmm_res_phi = fmm.lfmm3d(eps=eps, sources=r_source.T, charges=charges, pg=2, pgt=2, targets=r_target.T)
+    grad_phi = -1/(4 * np.pi * eps0) * fmm_res_phi.gradtarg.T
+    for i in range(n):
+                E_v = grad_phi[i] - b_im[i]
                 E[i] = vnorm(E_v)
     return E
 
@@ -1838,5 +1873,5 @@ def read_from_ccd(data_path):
 
     data = np.asarray(lines)
     m_pos = data[:, :3]
-    m = data[:, -1]
+    m = data[:, :-3]
     return m, m_pos
