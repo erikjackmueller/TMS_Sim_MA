@@ -504,7 +504,11 @@ def plot_E_diff_test(res1, res2, r, theta, r_max, r0=None, m=None):
 
 def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     diff = np.abs(res2 - res1)
-    fig, ax = plt.subplots(1, 3, subplot_kw={'projection': 'polar'}, figsize=(14, 4))
+    rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
+    res1 = (res1 - res1.min()) / (res1.max() - res1.min())
+    res2 = (res2 - res2.min()) / (res2.max() - res2.min())
+    diff = (diff - diff.min()) / (diff.max() - diff.min())
+    fig, ax = plt.subplots(1, 3, subplot_kw={'projection': 'polar'}, figsize=(14, 5))
     ax1, ax2, ax3 = ax[0], ax[1], ax[2]
     f_max = max(res1.max(), res2.max())
     f_min = min(res1.min(), res2.min())
@@ -518,19 +522,23 @@ def plot_E_diff(res1, res2, r, theta, r_max, r0=None, m=None):
     ax2.set_ylim(0, r_max)
     # ax2.set_yticks(np.arange(0, r_max, r_max / 10))
     ax2.grid(True)
-    im = ax3.pcolormesh(theta, r, diff, cmap='plasma', vmin=f_min, vmax=f_max)
+    fig.colorbar(im)
+    f_maxd = diff.max()
+    f_mind = diff.min()
+    im = ax3.pcolormesh(theta, r, diff, cmap='plasma', vmin=f_mind, vmax=f_maxd)
     ax3.set_yticklabels([])
     ax3.set_ylim(0, r_max)
     # ax3.set_yticks(np.arange(0, r_max, r_max / 10))
     ax3.grid(True)
-    fig.colorbar(im)
+
     ax1.set_title("analytic")
     ax2.set_title("numeric")
     ax3.set_title("difference")
     plt.subplots_adjust(wspace=0.7)
     plt.subplots_adjust(hspace=0.5)
-    rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
-    fig.suptitle(f"relative error: {rerror:.4f}%")
+
+    fig.suptitle(f"Electric field magnitudes and difference normalized by their respective maximum \n relative error: "
+                 f"{rerror:.4f} %")
     plt.show()
 
 
@@ -551,7 +559,7 @@ def plot_E_sphere_surf(res, phi, theta, r, c_map=cm.plasma):
 
 def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma):
     diff = np.abs(res2 - res1)
-    fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(12, 4))
+    fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(14, 5))
     ax1, ax2, ax3 = ax[0], ax[1], ax[2]
     x = r * np.sin(phi) * np.cos(theta)
     y = r * np.sin(phi) * np.sin(theta)
@@ -566,17 +574,19 @@ def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma):
     fcolorsdiff = (fcolorsdiff - fmin_d) / (fmax_d - fmin_d)
 
     ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors1))
-    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
     ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolorsdiff))
+    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
 
     ax1.set_title("analytic")
     ax2.set_title("numeric")
     ax3.set_title("difference")
     # ax.grid()
     m = cm.ScalarMappable(cmap=c_map)
-    fig.colorbar(m, shrink=0.5, pad=0.15)
+    cbar = fig.colorbar(m, shrink=0.5, pad=0.15)
+    # cbar.set_label("normalized difference", rotation=270)
     rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
-    fig.suptitle(f"relative error: {rerror:.4f} %")
+    fig.suptitle(f"Electric field magnitudes and difference normalized by their respective maximum"
+                 f" \n relative error: {rerror:.4f} %")
     plt.show()
 
 

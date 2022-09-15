@@ -23,15 +23,17 @@ man = MyManager()
 if __name__ == '__main__':
     # functions.plot_default()
     man.start()
-    n = 100
-    scaling_factor = 0.1
+    n = 400
+    scaling_factor = 1
     r_max = 0.9 * scaling_factor
-    r = np.linspace(0.41 * scaling_factor, r_max, n)
-    theta = np.linspace(0, np.pi, n)
+    r = np.linspace(0.01 * scaling_factor, r_max, n)
+    theta = np.linspace(0, 2*np.pi, n)
     phi = (1/2)*np.pi
     # r0 = np.array([0, 1.05, 0])
-    r0 = 1.05*np.array([0, 1, 0]) * scaling_factor
-    m = np.array([-1, 0, 0])
+    direction = np.array([1, 1, 0])
+    d_norm = direction / np.linalg.norm(direction)
+    r0 = 1.05 * d_norm * scaling_factor
+    m = d_norm
     r_t, t_t = np.meshgrid(r, theta)
     r_target = circle_to_carthesian(r=r_t.flatten(), theta=t_t.flatten())
 
@@ -44,22 +46,24 @@ if __name__ == '__main__':
 
     start = time.time()
     # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-    tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
-    # functions.triangulateSphere(20)
+    # tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
+    tc, areas, tri_points, n_v, avg_len = sphere_mesh(1000, scaling=scaling_factor)
     end = time.time()
     t = t_format(end - start)
     print(f"{t[0]:.2f}" + t[1] + " triangulation")
 
     start = time.time()
     # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
-    Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
+    b_im = jacobi_vectors_numpy(tc, n_v, r0, m)
+    Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
+    # Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
     end = time.time()
     t = t_format(end - start)
     print(f"{t[0]:.2f}" + t[1] + "  Q calculation")
 
     start = time.time()
 
-    res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-2, m=m, r0=r0)
+    res_flat = SCSM_FMM_E(Q=Q, r_source=tc, r_target=r_target, eps=1e-2, m=m, r0=r0)
     res = array_unflatten(res_flat, n_rows=n).T
     # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)

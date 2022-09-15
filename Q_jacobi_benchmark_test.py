@@ -25,8 +25,7 @@ r0 = 1.05 * d_norm * scaling_factor
 m = d_norm
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 
-# samples = [5000, 10000, 20000, 50000, 100000, 250000, 850000]
-samples = [50000, 100000, 250000, 850000]
+samples = [1000, 5000, 20000, 50000, 100000, 250000, 850000]
 t_numpy = []
 t_jacobi = []
 errors = []

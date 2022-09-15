@@ -7,8 +7,8 @@ from pathlib import Path
 import os
 matplotlib.use("TkAgg")
 
-path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
-# path = os.path.realpath(Path("C:/Users/User/Downloads"))
+# path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
+path = os.path.realpath(Path("C:/Users/User/Downloads"))
 fn = os.path.join(path, "15484.08.hdf5")
 fn2 = os.path.join(path, "e.hdf5")
 fn3 = "MagVenture_MCF_B65_REF_highres.ccd"
@@ -24,19 +24,13 @@ direction = np.array([1, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm * scaling_factor
 transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
-
-x_change = 1.05
-transformation_matrix = np.eye(4)
-transformation_matrix[3, 0] = x_change
-
-
 m, m_pos = read_from_ccd(path)
-m_pos = m_pos * 1e-5
-
+m_pos0 = m_pos.copy()
 m_pos1 = np.vstack((m_pos.T, np.ones(m_pos.shape[0]))).T
 m_pos1 = transformation_matrix @ m_pos1.T
 m_pos = m_pos1[:3].T
-m_pos.tofile('data.csv', sep = ',')
+np.savetxt("coil0.csv", m_pos0, delimiter=",")
+np.savetxt("coil.csv", m_pos, delimiter=",")
 end = time.time()
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 r0 = m_pos

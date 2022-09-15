@@ -3,6 +3,7 @@ import numpy as np
 import time
 import matplotlib
 matplotlib.use("TkAgg")
+from pathlib import Path
 import multiprocessing.managers
 from matplotlib import cm
 
@@ -10,9 +11,11 @@ from matplotlib import cm
 
 # functions.plot_default()
 # path = os.path.realpath(Path("C:/Users/Besitzer/Downloads/Sphere_642"))
+path = os.path.realpath(Path("C:/Users/Besitzer/Downloads"))
+fn2 = os.path.join(path, "e.hdf5")
 # path = "Sphere_10242"
 # sizes = [10242, 1280]
-path = "Sphere_2964"
+path1 = "Sphere_2964"
 sizes = [2964, 1280]
 # path = "Sphere_642"
 # sizes = [642, 1280]
@@ -23,7 +26,7 @@ sizes = [2964, 1280]
 # man = MyManager()
 # if __name__ == '__main__':
 #     man.start()
-n = 100
+n = 400
 scaling_factor = 1
 r = 0.97 * scaling_factor
 phi1 = np.linspace(0, np.pi, n)
@@ -33,6 +36,7 @@ phi, theta = phi2.T, theta2.T
 direction = np.array([1, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm * scaling_factor
+# m, m_pos, transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 m = d_norm
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 
@@ -62,7 +66,8 @@ print(f"elements: {n_elements}")
 # print(f"{t[0]:.2f}" + t[1] + "  Q linalg.solve()")
 
 start = time.time()
-Q = SCSM_jacobi_iter_debug(tc, tri_points, areas, n=n_v, r0=r0, m=m, tol=1e-2, initial_guess=False)
+b_im = jacobi_vectors_numpy(tc, n_v, r0, m)
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
 rs = tc
 end = time.time()
 t = t_format(end - start)
@@ -104,8 +109,8 @@ rerror_imag = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
 print(f"relative error: {rerror_imag:.7f}%")
 # print(f"relative error with near field: {rerror_imag2:.7f}%")
 
-# functions.plot_E_sphere_surf(res, phi, theta, r)
-# plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.coolwarm)
+# plot_E_sphere_surf(res, phi, theta, r)
+plot_E_sphere_surf_diff(res1, res2, phi, theta, r)
 # functions.plot_E_sphere_surf(res2, phi, theta, r)
 # functions.plot_E_sphere_surf(diff, phi, theta, r)
 # functions.plot_E_sphere_surf(relative_diff, phi, theta, r)
