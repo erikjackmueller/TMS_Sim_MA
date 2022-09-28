@@ -33,14 +33,11 @@ tissue_number = tissue_types[-1] - 1000
 for i in range(tissue_number):
     sigma[np.where(tissue_types == tissue_number + 1000)] = sigmas[i]
 m, m_pos = read_from_ccd(path)
-m_pos1 = np.vstack((m_pos.T, np.ones(m_pos.shape[0]))).T
-m_pos1 = transformation_matrix @ m_pos1.T
-m_pos = m_pos1[:3].T
-m = 1e-5*np.array([1, 1, 0])
-
-# m_pos.tofile('data.csv', sep = ',')
+m_pos = translate(m_pos, transformation_matrix)
+m = translate(m, transformation_matrix)
+# point source
+# m = 1e-5*np.array([1, 1, 0])
 end = time.time()
-# test in paraview tomorrow
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " triangulation")
 
@@ -54,7 +51,7 @@ print(f"{t[0]:.2f}" + t[1] + " Q calculation")
 
 start = time.time()
 res = SCSM_FMM_E(Q=Q, r_source=tc, r_target=r_targets, eps=1e-15, m=m, r0=r0)
-with h5py.File('test_e_field_csf.hdf5', 'w') as f:
+with h5py.File('e_field_midlayer_m1s1_pmd_scsm.hdf5', 'w') as f:
     f.create_dataset('e', data=res)
 end = time.time()
 t = t_format(end - start)

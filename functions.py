@@ -4,7 +4,7 @@ import numpy as np
 from scipy.special import legendre
 from itertools import product
 from functools import partial
-# from mpl_toolkits import mplot3d
+from mpl_toolkits import mplot3d
 from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -1884,4 +1884,21 @@ def read_from_ccd(data_path):
     data = np.asarray(lines)
     m_pos = data[:, :3]
     m = data[:, :-3]
-    return m, m_pos
+    return m, 1000 * m_pos
+
+def array_3d_plot(array):
+
+    xs = array[:, 0]
+    ys = array[:, 1]
+    zs = array[:, 2]
+    fig = plt.figure()
+    ax = plt.axes(projection="3d")
+    ax.plot3D(xs, ys, zs)
+
+    plt.show()
+
+def translate(array, transformation_matrix):
+    a = np.vstack((array.T, np.ones(array.shape[0]))).T
+    a = transformation_matrix @ a.T
+    res = a[:3].T
+    return res
