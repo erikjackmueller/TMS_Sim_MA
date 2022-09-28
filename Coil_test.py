@@ -28,6 +28,7 @@ m, m_pos = read_from_ccd(file_path)
 m_pos = translate(m_pos, transformation_matrix)
 m = translate(m, transformation_matrix)
 # np.savetxt("coil0.csv", m_pos0, delimiter=",")
+
 np.savetxt("coil.csv", m_pos, delimiter=",")
 end = time.time()
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
