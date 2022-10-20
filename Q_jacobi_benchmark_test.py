@@ -11,7 +11,6 @@ import multiprocessing.managers
 #     pass
 # MyManager.register('np_zeros', np.zeros, multiprocessing.managers.ArrayProxy)
 # man = MyManager()
-
 n = 100
 scaling_factor = 1
 r = 0.85 * scaling_factor
@@ -22,16 +21,18 @@ phi, theta = phi2.T, theta2.T
 direction = np.array([1, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm * scaling_factor
+omega = 3e3
 m = d_norm
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 
-samples = [1000, 5000, 20000, 50000, 100000, 250000, 850000]
+# samples = [1000, 5000, 20000, 50000, 100000, 250000, 850000]
+samples = [100, 104, 106, 108, 110, 114, 116, 118, 120]
 t_numpy = []
 t_jacobi = []
 errors = []
 compare = False
 
-res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface")
+res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface", omega=omega)
 
 # if __name__ == "__main__":
 for i in range(len(samples)):
@@ -63,7 +64,8 @@ for i in range(len(samples)):
         end_sub = time.time()
         t_sub = t_format(end_sub - start_sub)
         print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
-        Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
+        Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-18, n_iter=1000, omega=omega, high_precision=True)
+        # print(f"{Q[:10]}")
         # Q = SCSM_jacobi_iter_debug(tc, areas, n=n_v, r0=r0, m=m, tol=1e-10, initial_guess=ig, n_iter=20,
         #                      b_im=b_im)
 
@@ -85,7 +87,7 @@ for i in range(len(samples)):
         t_jacobi.append(t)
         start = time.time()
 
-        res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-2, m=m, r0=r0)
+        res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-2, m=m, r0=r0, omega=omega)
         res = array_unflatten(res_flat, n_rows=n)
         res2 = res.copy()
         diff = np.abs(res1 - res2)

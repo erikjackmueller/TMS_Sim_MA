@@ -157,12 +157,16 @@ def read_mesh_from_hdf5(fn, mode="source"):
             triangle_number_list = np.array(f['mesh']['elm']['triangle_number_list'])
             node_number = np.array(f['mesh']['nodes']['node_number'])
             node_coords = np.array(f['mesh']['nodes']['node_coord'])
-        # only consider csf tissue for test evaluation
-        tris_wm = triangle_number_list[np.where(tri_tissue_type == 1001)]
-        tris_gm = triangle_number_list[np.where(tri_tissue_type == 1002)]
-        tris_csf = triangle_number_list[np.where(tri_tissue_type == 1003)]
-        tri_tissue_type = tri_tissue_type#[np.where(tri_tissue_type < 1004)]
-        points = triangle_number_list#[np.where(tri_tissue_type < 1004)]
+        # don't consider eyeballs and cerebellum for evaluation (tissue_type 1006, 1ßß7)
+        # tris_wm = triangle_number_list[np.where(tri_tissue_type == 1001)]
+        # tris_gm = triangle_number_list[np.where(tri_tissue_type == 1002)]
+        # tris_csf = triangle_number_list[np.where(tri_tissue_type == 1003)]
+        # tris_skull = triangle_number_list[np.where(tri_tissue_type == 1004)]
+        # tris_skin = triangle_number_list[np.where(tri_tissue_type == 1005)]
+        # tris = np.vstack([tris_wm, tris_gm, tris_csf, tris_skull, tris_skin])
+        tri_tissue_type = tri_tissue_type[np.where(tri_tissue_type < 1006)]
+        points = triangle_number_list[np.where(tri_tissue_type < 1006)]
+
         n = points.shape[0]
         triangle_centers = np.zeros([n, 3])
         areas = np.zeros(n)
@@ -191,15 +195,13 @@ def read_mesh_from_hdf5(fn, mode="source"):
 
     elif mode == "coil":
         with h5py.File(fn, "r") as f:
-            m = np.array(f['coil']['dipole_moment_mag'])
-            m_pos = np.array(f['coil']['dipole_position'])
             transformation_matrix = np.array(f['info']['matsimnibs'])
             sigmas = np.array((np.array(f['info']['sigma_WM']), np.array(f['info']['sigma_GM']),
                                np.array(f['info']['sigma_CSF']), np.array(f['info']['sigma_Skull']),
-                               np.array(f['info']['sigma_Scalp'])))
+                               np.array(f['info']['sigma_Scalp']), 0))
         return transformation_matrix, sigmas
     else:
-        raise ValueError("mode can only be 'source' or 'target'!")
+        raise ValueError("mode can only be 'source', 'target' or 'coil'!")
 
 def plot_mesh(locations, connections, n1, n2, centers=None):
     fig = plt.figure()
@@ -775,13 +777,74 @@ def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1])
         x = x_new
     return x
 
-def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig=0.33, omega=1, n_iter=1000, tol=1e-15, verbose=False):
+def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0, omega=3e3, n_iter=1000, tol=1e-15,
+                          high_precision=False):
+
+    if high_precision:
+        rs = cp.asarray(tri_centers, dtype='float64')
+        areas = cp.asarray(areas, dtype='float64')
+        n = cp.asarray(n, dtype='float64')
+        b_im = cp.asarray(b_im, dtype='float64')
+        sig_out = cp.asarray(sig_out, dtype='float64')
+        sig_in = cp.asarray(sig_in, dtype='float64')
+    else:
+        rs = cp.asarray(tri_centers, dtype='float32')
+        areas = cp.asarray(areas, dtype='float32')
+        n = cp.asarray(n, dtype='float32')
+        b_im = cp.asarray(b_im, dtype='float32')
+        sig_out = cp.asarray(sig_out, dtype='float32')
+        sig_in = cp.asarray(sig_in, dtype='float32')
+
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+
+    def vnorm(x):
+        return cp.linalg.norm(x)
+
+    def v_vnorm(x):
+        x = x.T
+        return cp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2).T
+
+    a_ii = - ( ((1/2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out)) ) * (1 / eps0 / areas)
+    # a_ii = - ((1 / 2) + ((1j * omega * eps0) / 0.33)) * (1 / eps0 / areas)
+    # if high_precision:
+    #     x = cp.zeros(M, dtype='complex128')
+    # else:
+    #     x = cp.zeros(M, dtype='complex64')
+    x = (1j * b_im) / a_ii
+    f = 4 * cp.pi * eps0
+    for i_iter in numba.prange(n_iter):
+        x_new = cp.zeros_like(x)
+        for i in numba.prange(M):
+            delta_r = rs[i] - rs
+            A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
+            A12 = f * v_vnorm(delta_r) ** 3
+            a_i = A11 / A12 #+ 1e-25j
+            b_i = 1j * b_im[i]
+            s1 = cp.dot(a_i[:i], x[:i])
+            s2 = cp.dot(a_i[i + 1:], x[i + 1:])
+            x_new[i] = (b_i - s1 - s2) / a_ii[i]
+
+        if vnorm(x - x_new) < tol:
+            print(f"jacobi converged after {i_iter + 1} iterations with error norm {vnorm(x - x_new):.2g}")
+            break
+        else:
+            print(f"x_new = {x_new}")
+            if i_iter == 0:
+                print(f"a_ii[-1] = {a_ii[-1]}, a_i[-2] = {a_i[-2]}")
+            print(f"iteration {i_iter + 1} / {n_iter} with error norm {vnorm(x - x_new):.2g}")
+            if i_iter == (n_iter - 1):
+                print(f"jacobi did not converge, maximum number of {n_iter} iterations was reached")
+        x = x_new
+    x_numpy = x.get()
+    return x_numpy
+
+def SCSM_jacobi_iter_cupy_old(tri_centers, areas, n, b_im, sig=0.33, omega=1, n_iter=1000, tol=1e-15, verbose=False):
 
     rs = cp.asarray(tri_centers, dtype='float32')
     areas = cp.asarray(areas, dtype='float32')
     n = cp.asarray(n, dtype='float32')
     b_im = cp.asarray(b_im, dtype='float32')
-    sig = cp.asarray(sig, dtype='float32')
     M = rs.shape[0]
     eps0 = 8.854187812813e-12
 
@@ -795,7 +858,7 @@ def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig=0.33, omega=1, n_iter
     x = cp.zeros(M, dtype='complex64')
     a_ii = - ((1 / 2) + ((1j * omega * eps0) / sig)) / eps0 / areas
     f = 4 * cp.pi * eps0
-    for _ in numba.prange(n_iter):
+    for i_iter in numba.prange(n_iter):
         x_new = cp.zeros_like(x)
         for i in numba.prange(M):
             delta_r = rs[i] - rs
@@ -807,6 +870,7 @@ def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig=0.33, omega=1, n_iter
             s2 = cp.dot(a_i[i + 1:], x[i + 1:])
             x_new[i] = (b_i - s1 - s2) / a_ii[i]
         if vnorm(x - x_new) < tol:
+            print(f"jacobi converged after {i_iter + 1} iterations")
             break
         x = x_new
     x_numpy = x.get()
@@ -851,32 +915,56 @@ def jac_inner_loop(rs, n, b_im, a_ii, f, x, x_new, idxs):
         x_new[i] = (b_i - s1 - s2) / a_ii[i]
 
 
-def jacobi_vectors_numpy(tri_centers, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=1, m_pos=0):
+def jacobi_vectors_cupy(rs, n, m=np.array([0, 1, 0]), omega=3e3, m_pos=0):
+    rs = cp.asarray(rs, dtype='float32')
+    n = cp.asarray(n, dtype='float32')
+    m = cp.asarray(m, dtype='float32')
+    m_pos = cp.asarray(m_pos, dtype='float32')
 
-    rs = tri_centers
+    b_im = cp.zeros(rs.shape[0])
+    for i in range(m.shape[0]):
+        r_r0_norms = cp.linalg.norm(rs - m_pos[i], axis=1)
+        b_i = omega * 1e-7 * cp.divide(np.sum(cp.cross(m[i], (rs - m_pos[i])) * n, axis=1), (cp.power(r_r0_norms, 3)))
+        b_im = b_im + b_i
+    return b_im.get()
+
+def jacobi_vectors_numpy(rs, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=3e3, m_pos=0):
+
     if type(m_pos) == np.ndarray:
-        bs = np.zeros((rs.shape[0], m.shape[0]))
+        # bs = np.zeros((rs.shape[0], m.shape[0]))
+        b_im = np.zeros(rs.shape[0])
         for i in range(m.shape[0]):
             r_r0_norms = np.linalg.norm(rs - m_pos[i], axis=1)
-            bs[:, i] = omega * 1e-7 * np.divide(np.sum(np.cross(m[i], (rs - m_pos[i])) * n, axis=1), (np.power(r_r0_norms, 3)))
-        b_im = np.sum(bs, axis=1)
+            b_i = omega * 1e-7 * np.divide(np.sum(np.cross(m[i], (rs - m_pos[i])) * n, axis=1), (np.power(r_r0_norms, 3)))
+            b_im = b_im + b_i
+        # b_im = np.sum(bs, axis=1)
     else:
         r_r0_norms = np.linalg.norm(rs - r0, axis=1)
         b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
     return b_im
 
-def vector_potential_for_E(rs, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=1, m_pos=0):
+@numba.jit(nopython=True, parallel=True)
+def jacobi_vectors_numba(b_im, rs, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=3e3, m_pos=0):
+    r_r0_norms = np.zeros(rs.shape[0])
+    for i in numba.prange(m.shape[0]):
+        for j in numba.prange(rs.shape[0]):
+            r_r0_norms[j] = np.linalg.norm(rs[j] - m_pos[i])
+        b_i = omega * 1e-7 * np.divide(np.sum(np.cross(m[i], (rs - m_pos[i])) * n, axis=1), (np.power(r_r0_norms, 3)))
+        b_im = b_im + b_i
+        b_out = b_im.copy()
+    # print(b_out[0])
+    return b_out
 
-    if type(m_pos) == np.ndarray:
-        bs = np.zeros((rs.shape[0], m.shape[0]))
-        for i in range(m.shape[0]):
-            r_r0_norms = np.linalg.norm(rs - m_pos[i], axis=1)
-            bs[:, i] = omega * 1e-7 * np.divide(np.sum(np.cross(m[i], (rs - m_pos[i])), axis=1), (np.power(r_r0_norms, 3)))
-        b_im = np.sum(bs, axis=1)
-    else:
-        r_r0_norms = np.linalg.norm(rs - r0, axis=1)
-        b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)), axis=1), (np.power(r_r0_norms, 3)))
-    return b_im
+def vector_potential_for_E(rs, m=np.array([0, 1, 0]), omega=1, m_pos=0):
+    rs = cp.asarray(rs, dtype='float32')
+    m = cp.asarray(m, dtype='float32')
+    m_pos = cp.asarray(m_pos, dtype='float32')
+    b_im = cp.zeros(rs.shape[0])
+    for i in range(m.shape[0]):
+        r_r0_norms = cp.linalg.norm(rs - m_pos[i], axis=1)
+        b_i = omega * 1e-7 * cp.divide(cp.sum(np.cross(m[i], (rs - m_pos[i])), axis=1), (cp.power(r_r0_norms, 3)))
+        b_im = b_im + b_i
+    return b_im.get()
 
 
 def SCSM_jacobi_iter_debug(tri_centers, areas, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
@@ -1893,7 +1981,7 @@ def array_3d_plot(array):
     zs = array[:, 2]
     fig = plt.figure()
     ax = plt.axes(projection="3d")
-    ax.plot3D(xs, ys, zs)
+    ax.scatter3D(xs, ys, zs)
 
     plt.show()
 

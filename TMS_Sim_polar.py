@@ -39,7 +39,7 @@ if __name__ == '__main__':
 
     start = time.time()
     time_0 = start
-    res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi)
+    res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, omega=1e3)
     end = time.time()
     t = t_format(end - start)
     print(f"{t[0]:.2f}" + t[1] + " receprocity")
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     start = time.time()
     # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
     b_im = jacobi_vectors_numpy(tc, n_v, r0, m)
-    Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
+    Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=20, omega=1e3)
     # Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m)
     end = time.time()
     t = t_format(end - start)
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     start = time.time()
 
-    res_flat = SCSM_FMM_E(Q=Q, r_source=tc, r_target=r_target, eps=1e-2, m=m, r0=r0)
+    res_flat = SCSM_FMM_E(Q=Q, r_source=tc, r_target=r_target, eps=1e-2, m=m, r0=r0, omega=1e3)
     res = array_unflatten(res_flat, n_rows=n).T
     # res = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta, r0=r0, m=m, phi=phi)
     # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)

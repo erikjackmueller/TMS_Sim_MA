@@ -26,16 +26,36 @@ r0 = 1.05 * d_norm * scaling_factor
 transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 m, m_pos = read_from_ccd(file_path)
 m_pos = translate(m_pos, transformation_matrix)
-m = translate(m, transformation_matrix)
+# m = translate(m, transformation_matrix)
 # np.savetxt("coil0.csv", m_pos0, delimiter=",")
 
 np.savetxt("coil.csv", m_pos, delimiter=",")
 end = time.time()
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
-r0 = m_pos
-
+# loc_mat = np.eye(4)
+# loc_mat[3, 0] = 3 # how did translation work?
+# loc_mat[3, 1] = 3
+# loc_mat[3, 2] = 3
+# loc_mat[3, 3] = 3
+m_pos = m_pos/200 + 0.75
 tc, areas, tri_points, n_v = sphere_mesh(1000, scaling=scaling_factor)[:4]
-simgas_test = np.random.rand(tc.shape[0])
+
+
+# set up realistic sigma values
+div = int(np.floor(tc.shape[0]/5))
+sigmas_in_test = np.zeros(tc.shape[0])
+sigmas_in_test[:div] = 0.126
+sigmas_in_test[div:(2*div)] = 0.275
+sigmas_in_test[(2*div):(3*div)] = 1.654
+sigmas_in_test[(3*div):(4*div)] = 0.001
+sigmas_in_test[(4*div):(5*div + 1)] = 0.456
+sigmas_out_test = np.zeros_like(sigmas_in_test)
+sigmas_out_test[:div] = 0.275
+sigmas_out_test[div:(2*div)] = 1.654
+sigmas_out_test[(2*div):(3*div)] = 0.001
+sigmas_out_test[(3*div):(4*div)] = 0.456
+sigmas_out_test[(4*div):(5*div + 1)] = 0.000
+
 
 ig = False
 print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
@@ -44,19 +64,21 @@ n_elem = tc.shape[0]
 rs = tc
 start = time.time()
 start_sub = start
-b_im = jacobi_vectors_numpy(tc, n_v, m=m, m_pos=m_pos)
+b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos, omega=3e3)
 end_sub = time.time()
 t_sub = t_format(end_sub - start_sub)
 print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
-Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig=simgas_test, tol=1e-10, n_iter=20)
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=sigmas_in_test, sig_out=sigmas_out_test, tol=1e-15, n_iter=100,
+                          omega=3e3)
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
 start = time.time()
 
-b_im_ = vector_potential_for_E(r_target, m=m, m_pos=m_pos)
-res_flat = SCSM_FMM_E2(Q=Q, r_source=rs, r_target=r_target, eps=1e-2, b_im=b_im_)
+b_im_ = vector_potential_for_E(r_target, m=m, m_pos=m_pos, omega=3e3)
+res_flat = SCSM_FMM_E2(Q=Q, r_source=rs, r_target=r_target, eps=1e-20, b_im=b_im_)
 res = array_unflatten(res_flat, n_rows=n)
+print(f"{res[0, 0]}")
 plot_E_sphere_surf(res, phi, theta, r)
 print("---------------------------")
 
