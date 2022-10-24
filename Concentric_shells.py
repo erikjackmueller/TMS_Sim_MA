@@ -7,12 +7,6 @@ from pathlib import Path
 import os
 matplotlib.use("TkAgg")
 
-file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
-# path = os.path.realpath(Path("C:/Users/User/Downloads"))
-fn = os.path.join(file_path, "15484.08.hdf5")
-fn2 = os.path.join(file_path, "e.hdf5")
-fn3 = "MagVenture_MCF_B65_REF_highres.ccd"
-
 start = time.time()
 print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 n = 100
@@ -25,26 +19,26 @@ phi, theta = phi2.T, theta2.T
 direction = np.array([1, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm * scaling_factor
-transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
-m, m_pos = read_from_ccd(file_path)
-m_pos = translate(m_pos, transformation_matrix)
-# m = translate(m, transformation_matrix)
-# np.savetxt("coil0.csv", m_pos0, delimiter=",")
-
-np.savetxt("coil.csv", m_pos, delimiter=",")
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
-# loc_mat = np.eye(4)
-# loc_mat[3, 0] = 3 # how did translation work?
-# loc_mat[3, 1] = 3
-# loc_mat[3, 2] = 3
-# loc_mat[3, 3] = 3
-m_pos = m_pos/200 + 0.75
+m = d_norm
 
-#create sphere mesh
-tc, areas, tri_points, n_v = sphere_mesh(1000, scaling=scaling_factor)[:4]
-
+# create concentric sphere meshes with different radii
+radii = np.array([0.8, 0.9, 0.905, 0.91, 1.0])
+r_shells = []
+for n in range(radii.shape[0]):
+    tc_n, areas_n, tri_points_n, n_v_n = sphere_mesh(1000, scaling=radii[n])[:4]
+    if n == 0:
+        div = tc_n.shape[0]
+        tc = tc_n
+        areas = areas_n
+        tri_points = tri_points_n
+        n_v = n_v_n
+    if n > 0:
+        tc = np.vstack((tc, tc_n))
+        areas = np.concatenate((areas, areas_n))
+        tri_points = np.vstack((tri_points, tri_points_n))
+        n_v = np.vstack((n_v, n_v_n))
 # set up realistic sigma values
-div = int(np.floor(tc.shape[0]/5))
 sigmas_in_test = np.zeros(tc.shape[0])
 sigmas_in_test[:div] = 0.126
 sigmas_in_test[div:(2*div)] = 0.275
@@ -68,7 +62,8 @@ print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
 start = time.time()
 start = time.time()
 start_sub = start
-b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos, omega=3e3)
+# b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos, omega=3e3)
+b_im = jacobi_vectors_numpy(rs, n, m=m, omega=3e3, m_pos=r0)
 end_sub = time.time()
 t_sub = t_format(end_sub - start_sub)
 print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
@@ -79,8 +74,8 @@ t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
 start = time.time()
 
-b_im_ = vector_potential_for_E(r_target, m=m, m_pos=m_pos, omega=3e3)
-res_flat = SCSM_FMM_E2(Q=Q, r_source=rs, r_target=r_target, eps=1e-20, b_im=b_im_)
+# b_im_ = vector_potential_for_E(r_target, m=m, m_pos=m_pos, omega=3e3)
+res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-20, omega=3e3)
 res = array_unflatten(res_flat, n_rows=n)
 print(f"{res[0, 0]}")
 plot_E_sphere_surf(res, phi, theta, r)

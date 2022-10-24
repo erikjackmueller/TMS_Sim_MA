@@ -114,7 +114,7 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
 
 def sphere_mesh(samples=1000, scaling=1):
 
-    locations = fibonacci_sphere_mesh(samples=samples).T
+    locations = scaling * fibonacci_sphere_mesh(samples=samples).T
     sphere_surf_locations = carthesian_to_sphere(locations.T)[:, 1:]
     tri = Delaunay(sphere_surf_locations)
     connections = tri.simplices.copy().T
@@ -142,8 +142,8 @@ def sphere_mesh(samples=1000, scaling=1):
         areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
         n_v[i] = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
         edge_lens[i] = 1/3*(np.linalg.norm(line1_2) + np.linalg.norm(line1_3) + np.linalg.norm(line2_3))
-    avg_lens = np.mean(edge_lens)
-    return triangle_centers, areas, triangle_points, n_v, avg_lens
+    avg_length = np.mean(edge_lens)
+    return triangle_centers, areas, triangle_points, n_v, avg_length
 
 def read_mesh_from_hdf5(fn, mode="source"):
 
@@ -930,17 +930,8 @@ def jacobi_vectors_cupy(rs, n, m=np.array([0, 1, 0]), omega=3e3, m_pos=0):
 
 def jacobi_vectors_numpy(rs, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=3e3, m_pos=0):
 
-    if type(m_pos) == np.ndarray:
-        # bs = np.zeros((rs.shape[0], m.shape[0]))
-        b_im = np.zeros(rs.shape[0])
-        for i in range(m.shape[0]):
-            r_r0_norms = np.linalg.norm(rs - m_pos[i], axis=1)
-            b_i = omega * 1e-7 * np.divide(np.sum(np.cross(m[i], (rs - m_pos[i])) * n, axis=1), (np.power(r_r0_norms, 3)))
-            b_im = b_im + b_i
-        # b_im = np.sum(bs, axis=1)
-    else:
-        r_r0_norms = np.linalg.norm(rs - r0, axis=1)
-        b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
+    r_r0_norms = np.linalg.norm(rs - r0, axis=1)
+    b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
     return b_im
 
 @numba.jit(nopython=True, parallel=True)
@@ -1858,10 +1849,12 @@ def fibonacci_sphere_mesh(samples=1000):
     phi = math.pi * (3. - math.sqrt(5.))  # golden angle in radians
 
     for i in range(samples):
-        y = 1 - (i / float(samples - 1)) * 2  # y goes from 1 to -1
-        radius = math.sqrt(1 - y * y)  # radius at y
-
-        theta = phi * i  # golden angle increment
+        # y goes from r to -r
+        y = 1 - (i / float(samples - 1)) * 2
+        # radius at y
+        radius = math.sqrt(1 - y * y)
+        # golden angle increment
+        theta = phi * i
 
         x = math.cos(theta) * radius
         z = math.sin(theta) * radius
