@@ -306,6 +306,37 @@ def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([
         raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
     return E
 
+# @numba.njit(parallel=True)
+def reciprocity_surface(rs, r0_v=np.array([12, 0, 0]), m=np.array([0, -1, 0]), omega=1):
+    M = rs.shape[0]
+    mu0 = 4 * np.pi * 1e-7
+    E_v = np.zeros((M, m.shape[0], 3))
+    for i in numba.prange(M):
+        r_v = rs[i]
+        for n in numba.prange(m.shape[0]):
+            r0 = np.linalg.norm(r0_v[n])
+            a_v = r0_v[n] - r_v
+            a = np.linalg.norm(a_v)
+            F = (r0 * a + np.dot(r0_v[n], a_v)) * a
+            nab_F = ((a ** 2 / r0 ** 2) + 2 * a + 2 * r0 + (np.dot(r0_v[n], a_v) / a)) * r0_v[n] - (
+                    a + 2 * r0 + (np.dot(r0_v[n], a_v) / a)) * r_v
+            E_v[i][n] = (omega * mu0 / (4 * np.pi * F ** 2) * (F * np.cross(r_v, m[n]) -
+                                                         np.dot(m[n], nab_F) * np.cross(r_v, r0_v[n])))
+    return E_v
+
+
+
+@numba.njit(parallel=True)
+def sphere_to_carth_numba(r_sphere, theta, phi):
+    for i_phi in numba.prange(phi.shape[0]):
+        for i_theta in numba.prange(theta.shape[0]):
+            phi_i = phi[i_phi, 0]
+            theta_j = theta[0, i_theta]
+            x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j), \
+                      r_sphere * np.cos(phi_i)
+            r = np.array([x, y, z])
+    return r
+
 
 def func_3_shells(r_sphere, theta, r0_v=np.array([12, 0, 0]), r_shells=np.array([7, 7.5, 8]),
                   sigmas=np.array([0.33, 0.01, 0.43])):
@@ -570,6 +601,7 @@ def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma):
     fmax, fmin = fcolors1.max(), fcolors1.min()
     fcolors1 = (fcolors1 - fmin) / (fmax - fmin)
     fcolors2 = res2
+    fmax, fmin = fcolors2.max(), fcolors2.min()
     fcolors2 = (fcolors2 - fmin) / (fmax - fmin)
     fcolorsdiff = diff
     fmax_d, fmin_d = fcolorsdiff.max(), fcolorsdiff.min()
@@ -733,6 +765,31 @@ def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1
     return Q, rs
 
 @numba.jit(nopython=True, parallel=True)
+def SCSM_matrix(tri_centers, areas, n, b_im=0, sig_in=0.33, sig_out=0.0, omega=1):
+    rs = tri_centers
+    M = rs.shape[0]
+    a = np.zeros((M, M), dtype=np.complex_)
+    B = np.zeros(M, dtype=np.complex_)
+    eps0 = 8.854187812813e-12
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    def kroen(i, j):
+        return int(i == j)
+
+    d = - (((1 / 2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out))) * (
+            1 / eps0 / areas)
+    for i in range(M):
+        for j in numba.prange(M):
+            a[i, j] = (np.dot((rs[i, :] - rs[j, :]), n[i])) / ((4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)))
+    B = 1j * b_im
+    A = a + d
+    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
+    Q = np.linalg.solve(A, B)
+    return Q, rs
+
+@numba.jit(nopython=True, parallel=True)
 def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
                           omega=1, n_iter=1000, tol=1e-15, A=None, b=None, initial_guess=False, b_im=None,
                      calc_b=True, verbose=False):
@@ -829,9 +886,9 @@ def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0, o
             print(f"jacobi converged after {i_iter + 1} iterations with error norm {vnorm(x - x_new):.2g}")
             break
         else:
-            print(f"x_new = {x_new}")
-            if i_iter == 0:
-                print(f"a_ii[-1] = {a_ii[-1]}, a_i[-2] = {a_i[-2]}")
+            print(f"x_new = {x_new[:2]}")
+            # if i_iter == 0:
+                # print(f"a_ii[-1] = {a_ii[-1]}, a_i[-2] = {a_i[-2]}")
             print(f"iteration {i_iter + 1} / {n_iter} with error norm {vnorm(x - x_new):.2g}")
             if i_iter == (n_iter - 1):
                 print(f"jacobi did not converge, maximum number of {n_iter} iterations was reached")
@@ -1983,3 +2040,33 @@ def translate(array, transformation_matrix):
     a = transformation_matrix @ a.T
     res = a[:3].T
     return res
+
+
+def layered_sphere_mesh(n_samples, sigmas, radii=np.array([0.8, 0.9, 0.905, 0.91, 1.0])):
+
+    for n_iter in range(radii.shape[0]):
+        tc_n, areas_n, tri_points_n, n_v_n = sphere_mesh(n_samples, scaling=radii[n_iter])[:4]
+        if n_iter == 0:
+            div = tc_n.shape[0]
+            tc = tc_n
+            areas = areas_n
+            tri_points = tri_points_n
+            n_v = n_v_n
+        if n_iter > 0:
+            tc = np.vstack((tc, tc_n))
+            areas = np.concatenate((areas, areas_n))
+            tri_points = np.vstack((tri_points, tri_points_n))
+            n_v = np.vstack((n_v, n_v_n))
+    # set up realistic sigma values
+    sigmas_in = np.zeros(tc.shape[0])
+    sigmas_out = np.zeros_like(sigmas_in)
+    for i in range(sigmas.shape[0]):
+
+        if i < (sigmas.shape[0] - 1):
+            sigmas_in[((i) * div):((i + 1) * div)] = sigmas[i]
+            sigmas_out[((i) * div):((i + 1) * div)] = sigmas[i + 1]
+        else:
+            sigmas_in[((i) * div):((i + 1) * div)] = sigmas[i]
+            sigmas_out[((i) * div):((i + 1) * div)] = 0.0
+
+    return tc, areas, tri_points, n_v, sigmas_in, sigmas_out

@@ -26,7 +26,7 @@ m = d_norm
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 
 # samples = [1000, 5000, 20000, 50000, 100000, 250000, 850000]
-samples = [100, 104, 106, 108, 110, 114, 116, 118, 120]
+samples = [400, 1000]
 t_numpy = []
 t_jacobi = []
 errors = []
@@ -60,11 +60,12 @@ for i in range(len(samples)):
 
         start = time.time()
         start_sub = start
-        b_im = jacobi_vectors_numpy(tc, n_v, r0, m)
+        b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
         end_sub = time.time()
         t_sub = t_format(end_sub - start_sub)
         print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
-        Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-18, n_iter=1000, omega=omega, high_precision=True)
+        Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
+        # Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-18, n_iter=1000, omega=omega, high_precision=True)
         # print(f"{Q[:10]}")
         # Q = SCSM_jacobi_iter_debug(tc, areas, n=n_v, r0=r0, m=m, tol=1e-10, initial_guess=ig, n_iter=20,
         #                      b_im=b_im)

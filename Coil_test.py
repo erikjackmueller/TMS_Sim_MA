@@ -7,8 +7,8 @@ from pathlib import Path
 import os
 matplotlib.use("TkAgg")
 
-file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
-# path = os.path.realpath(Path("C:/Users/User/Downloads"))
+# file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
+file_path = os.path.realpath(Path("C:/Users/User/Downloads"))
 fn = os.path.join(file_path, "15484.08.hdf5")
 fn2 = os.path.join(file_path, "e.hdf5")
 fn3 = "MagVenture_MCF_B65_REF_highres.ccd"
@@ -33,13 +33,10 @@ m_pos = translate(m_pos, transformation_matrix)
 
 np.savetxt("coil.csv", m_pos, delimiter=",")
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
-# loc_mat = np.eye(4)
-# loc_mat[3, 0] = 3 # how did translation work?
-# loc_mat[3, 1] = 3
-# loc_mat[3, 2] = 3
-# loc_mat[3, 3] = 3
 m_pos = m_pos/200 + 0.75
 
+res1_flat = reciprocity_surface(rs=r_target, r0_v=m_pos, m=m, omega=3e3)
+res1 = array_unflatten(res1_flat, n_rows=n)
 #create sphere mesh
 tc, areas, tri_points, n_v = sphere_mesh(1000, scaling=scaling_factor)[:4]
 
@@ -74,6 +71,9 @@ t_sub = t_format(end_sub - start_sub)
 print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
 Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=sigmas_in_test, sig_out=sigmas_out_test, tol=1e-15, n_iter=100,
                           omega=3e3)
+
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=0.33, sig_out=0.00, tol=1e-15, n_iter=100,
+                          omega=3e3)
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
@@ -83,8 +83,9 @@ b_im_ = vector_potential_for_E(r_target, m=m, m_pos=m_pos, omega=3e3)
 res_flat = SCSM_FMM_E2(Q=Q, r_source=rs, r_target=r_target, eps=1e-20, b_im=b_im_)
 res = array_unflatten(res_flat, n_rows=n)
 print(f"{res[0, 0]}")
-plot_E_sphere_surf(res, phi, theta, r)
+plot_E_sphere_surf(res1, phi, theta, r)
 print("---------------------------")
+print(np.linalg.norm(res - res1))
 
 
 

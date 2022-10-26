@@ -21,64 +21,42 @@ d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm * scaling_factor
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 m = d_norm
-
+res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, omega=3e3, projection="sphere_surface")
 # create concentric sphere meshes with different radii
-radii = np.array([0.8, 0.9, 0.905, 0.91, 1.0])
-r_shells = []
-for n in range(radii.shape[0]):
-    tc_n, areas_n, tri_points_n, n_v_n = sphere_mesh(1000, scaling=radii[n])[:4]
-    if n == 0:
-        div = tc_n.shape[0]
-        tc = tc_n
-        areas = areas_n
-        tri_points = tri_points_n
-        n_v = n_v_n
-    if n > 0:
-        tc = np.vstack((tc, tc_n))
-        areas = np.concatenate((areas, areas_n))
-        tri_points = np.vstack((tri_points, tri_points_n))
-        n_v = np.vstack((n_v, n_v_n))
-# set up realistic sigma values
-sigmas_in_test = np.zeros(tc.shape[0])
-sigmas_in_test[:div] = 0.126
-sigmas_in_test[div:(2*div)] = 0.275
-sigmas_in_test[(2*div):(3*div)] = 1.654
-sigmas_in_test[(3*div):(4*div)] = 0.001
-sigmas_in_test[(4*div):(5*div + 1)] = 0.456
-sigmas_out_test = np.zeros_like(sigmas_in_test)
-sigmas_out_test[:div] = 0.275
-sigmas_out_test[div:(2*div)] = 1.654
-sigmas_out_test[(2*div):(3*div)] = 0.001
-sigmas_out_test[(3*div):(4*div)] = 0.456
-sigmas_out_test[(4*div):(5*div + 1)] = 0.000
-
-
+# radii = np.array([0.8, 0.9, 0.905, 0.91, 1.0])
+radii = np.array([0.4, 0.5, 0.6, 0.7, 0.85])
+sigmas = np.array([0.126, 0.275, 1.654, 0.001, 0.456])
+tc, areas, tri_points, n_v, sigmas_in, sigmas_out = layered_sphere_mesh(n_samples=1000, sigmas=sigmas, radii=radii)
 print(f"elements: {tc.shape[0]}")
 n_elem = tc.shape[0]
 rs = tc
-end = time.time()
-t = t_format(end - start)
-print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
-start = time.time()
-start = time.time()
-start_sub = start
+
 # b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos, omega=3e3)
-b_im = jacobi_vectors_numpy(rs, n, m=m, omega=3e3, m_pos=r0)
-end_sub = time.time()
-t_sub = t_format(end_sub - start_sub)
-print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
-Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=sigmas_in_test, sig_out=sigmas_out_test, tol=1e-15, n_iter=100,
-                          omega=3e3)
+b_im = jacobi_vectors_numpy(rs, n=n_v, m=m, omega=3e3, m_pos=r0)
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=sigmas_in, sig_out=sigmas_out, tol=1e-18, n_iter=20,
+                         omega=3e3)
 end = time.time()
 t = t_format(end - start)
-print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
+print(f"{t[0]:.2f}" + t[1] + " jacobi  Q")
+start = time.time()
+Q1, rs = SCSM_matrix(tc, areas, n=n_v, sig_in=sigmas_in, sig_out=sigmas_out, b_im=b_im, omega=3e3)
+end = time.time()
+t = t_format(end - start)
+print(f"{t[0]:.2f}" + t[1] + " matrix  Q")
 start = time.time()
 
+print(f"difference= {np.linalg.norm(Q.imag) - np.linalg.norm(Q1.imag)}")
+
 # b_im_ = vector_potential_for_E(r_target, m=m, m_pos=m_pos, omega=3e3)
-res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-20, omega=3e3)
+res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-20, r0=r0, omega=3e3)
 res = array_unflatten(res_flat, n_rows=n)
-print(f"{res[0, 0]}")
-plot_E_sphere_surf(res, phi, theta, r)
+res_flat = SCSM_FMM_E(Q=Q1, r_source=rs, r_target=r_target, eps=1e-20, r0=r0, omega=3e3)
+res2 = array_unflatten(res_flat, n_rows=n)
+print(f"E[0,0] {res[0, 0]}")
+plot_E_sphere_surf_diff(res1, res, phi, theta, r)
+plot_E_sphere_surf_diff(res1, res2, phi, theta, r)
+
+# plot_E_sphere_surf(res, phi, theta, r)
 print("---------------------------")
 
 
