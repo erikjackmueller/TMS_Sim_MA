@@ -20,7 +20,7 @@ fn3 = "MagVenture_MCF_B65_REF_highres.ccd"
 print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 start = time.time()
 time_0 = start
-tc, areas, tri_points, n_v, tissue_types = read_mesh_from_hdf5(fn) #currently only csf points
+tc, areas, tri_points, n_v, tissue_types = read_mesh_from_hdf5(fn)
 r_targets = read_mesh_from_hdf5(fn, mode="target")
 transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 print(f"# of elements: {tc.shape[0]}")
@@ -43,7 +43,7 @@ end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " b calculation")
 start = time.time()
-Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=15, omega=3e3, sig_in=sigma_in, sig_out=sigma_out)
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-12, n_iter=20, omega=3e3, sig_in=sigma_in, sig_out=sigma_out)
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " Q calculation")

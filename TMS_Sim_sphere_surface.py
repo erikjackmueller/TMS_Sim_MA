@@ -28,7 +28,7 @@ sizes = [2964, 1280]
 #     man.start()
 n = 400
 scaling_factor = 1
-r = 0.97 * scaling_factor
+r = 0.90 * scaling_factor
 phi1 = np.linspace(0, np.pi, n)
 theta1 = np.linspace(0, 2 * np.pi, n)
 phi2, theta2 = np.meshgrid(phi1, theta1)
@@ -39,8 +39,6 @@ r0 = 1.05 * d_norm * scaling_factor
 # m, m_pos, transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 m = d_norm
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
-
-
 
 start = time.time()
 time_0 = start
@@ -67,9 +65,9 @@ print(f"elements: {n_elements}")
 
 start = time.time()
 b_im = jacobi_vectors_numpy(tc, n_v, r0, m)
-# Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
-# Q, rs = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=3e3)
-Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=3e3)[0]
+# Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-18, n_iter=20)
+Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=3e3)
+# Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=3e3)[0]
 
 rs = tc
 end = time.time()

@@ -291,7 +291,7 @@ def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([
             for i_theta in range(theta.shape[0]):
                 phi_i = phi[i_phi, 0]
                 theta_j = theta[0, i_theta]
-                x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j),\
+                x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j), \
                           r_sphere * np.cos(phi_i)
                 r_v = np.array([x, y, z])
                 a_v = r0_v - r_v
@@ -304,6 +304,24 @@ def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([
                 E[i_phi, i_theta] = vnorm(E_v)
     else:
         raise TypeError("projection can only be 'polar' or 'sphere_surface'!")
+    return E
+
+def reciprocity_sphere(grid, n=100, r0_v=np.array([12, 0, 0]), m=np.array([0, -1, 0]), omega=1):
+    mu0 = 4 * np.pi * 1e-7
+    r0 = vnorm(r0_v)
+
+    E = np.zeros([n, n])
+    for i in range(n):
+        for j in range(n):
+            r_v = np.array([grid[0][i,j],grid[1][i,j],grid[2][i,j]])
+            a_v = r0_v - r_v
+            a = vnorm(a_v)
+            F = (r0 * a + np.dot(r0_v, a_v)) * a
+            nab_F = ((a ** 2 / r0 ** 2) + 2 * a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r0_v - (
+                    a + 2 * r0 + (np.dot(r0_v, a_v) / a)) * r_v
+            E_v = omega * mu0 / (4 * np.pi * F ** 2) * (
+                        F * np.cross(r_v, m) - np.dot(m, nab_F) * np.cross(r_v, r0_v))
+            E[i, j] = vnorm(E_v)
     return E
 
 # @numba.njit(parallel=True)
@@ -590,29 +608,46 @@ def plot_E_sphere_surf(res, phi, theta, r, c_map=cm.plasma):
     fig.colorbar(m, shrink=0.5, pad=0.15)
     plt.show()
 
-def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma):
+def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma, normalize=True, names = ["analytic", "numeric"]):
     diff = np.abs(res2 - res1)
     fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(14, 5))
     ax1, ax2, ax3 = ax[0], ax[1], ax[2]
     x = r * np.sin(phi) * np.cos(theta)
     y = r * np.sin(phi) * np.sin(theta)
     z = r * np.cos(phi)
-    fcolors1 = res1
-    fmax, fmin = fcolors1.max(), fcolors1.min()
-    fcolors1 = (fcolors1 - fmin) / (fmax - fmin)
-    fcolors2 = res2
-    fmax, fmin = fcolors2.max(), fcolors2.min()
-    fcolors2 = (fcolors2 - fmin) / (fmax - fmin)
-    fcolorsdiff = diff
-    fmax_d, fmin_d = fcolorsdiff.max(), fcolorsdiff.min()
-    fcolorsdiff = (fcolorsdiff - fmin_d) / (fmax_d - fmin_d)
 
-    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors1))
-    ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolorsdiff))
-    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
+    if normalize:
+        fcolors1 = res1
+        fmax, fmin = fcolors1.max(), fcolors1.min()
+        fcolors1 = (fcolors1 - fmin) / (fmax - fmin)
+        fcolors2 = res2
+        fmax, fmin = fcolors2.max(), fcolors2.min()
+        fcolors2 = (fcolors2 - fmin) / (fmax - fmin)
+        fcolorsdiff = diff
+        fmax_d, fmin_d = fcolorsdiff.max(), fcolorsdiff.min()
+        fcolorsdiff = (fcolorsdiff - fmin_d) / (fmax_d - fmin_d)
+        min_val1, min_val2, min_vald = 0, 0, 0
+        max_val1, max_val2, max_vald = 1, 1, 1
+    else:
+        fcolors1 = res1
+        min_val1 = res1.min()
+        max_val1 = res1.max()
+        fcolors2 = res2
+        min_val2 = res2.min()
+        max_val2 = res2.max()
+        fcolorsdiff = diff
+        min_vald = diff.min()
+        max_vald = diff.max()
 
-    ax1.set_title("analytic")
-    ax2.set_title("numeric")
+    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors1),
+                     norm="Normalise", vmin=min_val1, vmax=max_val1)
+    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2),
+                     norm="Normalise", vmin=min_val2, vmax=max_val2)
+    ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolorsdiff),
+                     norm="Normalise", vmin=min_vald, vmax=max_vald)
+
+    ax1.set_title(names[0])
+    ax2.set_title(names[1])
     ax3.set_title("difference")
     # ax.grid()
     m = cm.ScalarMappable(cmap=c_map)
@@ -769,7 +804,6 @@ def SCSM_matrix(tri_centers, areas, n, b_im=0, sig_in=0.33, sig_out=0.0, omega=1
     rs = tri_centers
     M = rs.shape[0]
     a = np.zeros((M, M), dtype=np.complex_)
-    B = np.zeros(M, dtype=np.complex_)
     eps0 = 8.854187812813e-12
 
     def vnorm(x):
@@ -780,14 +814,14 @@ def SCSM_matrix(tri_centers, areas, n, b_im=0, sig_in=0.33, sig_out=0.0, omega=1
 
     d = - (((1 / 2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out))) * (
             1 / eps0 / areas)
-    for i in range(M):
+    for i in numba.prange(M):
         for j in numba.prange(M):
             a[i, j] = (np.dot((rs[i, :] - rs[j, :]), n[i])) / ((4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)))
     B = 1j * b_im
-    A = a + d
+    A = a + np.diag(d)
     # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
     Q = np.linalg.solve(A, B)
-    return Q, rs
+    return Q
 
 @numba.jit(nopython=True, parallel=True)
 def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
@@ -876,7 +910,7 @@ def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0, o
             delta_r = rs[i] - rs
             A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
             A12 = f * v_vnorm(delta_r) ** 3
-            a_i = A11 / A12 #+ 1e-25j
+            a_i = A11 / (A12 + 1e-20)
             b_i = 1j * b_im[i]
             s1 = cp.dot(a_i[:i], x[:i])
             s2 = cp.dot(a_i[i + 1:], x[i + 1:])
@@ -985,8 +1019,7 @@ def jacobi_vectors_cupy(rs, n, m=np.array([0, 1, 0]), omega=3e3, m_pos=0):
         b_im = b_im + b_i
     return b_im.get()
 
-def jacobi_vectors_numpy(rs, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=3e3, m_pos=0):
-
+def jacobi_vectors_numpy(rs, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=3e3):
     r_r0_norms = np.linalg.norm(rs - r0, axis=1)
     b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
     return b_im
@@ -1010,9 +1043,22 @@ def vector_potential_for_E(rs, m=np.array([0, 1, 0]), omega=1, m_pos=0):
     b_im = cp.zeros(rs.shape[0])
     for i in range(m.shape[0]):
         r_r0_norms = cp.linalg.norm(rs - m_pos[i], axis=1)
-        b_i = omega * 1e-7 * cp.divide(cp.sum(np.cross(m[i], (rs - m_pos[i])), axis=1), (cp.power(r_r0_norms, 3)))
+        cross = np.cross(m[i], (rs - m_pos[i]))
+        r3 = (cp.power(r_r0_norms, 3))
+        b_i = omega * 1e-7 * np.vstack((cross[:, 0] / r3, cross[:, 1] / r3, cross[:, 2] / r3)).T
         b_im = b_im + b_i
     return b_im.get()
+
+def vector_potential_for_E_single_m(rs, m=np.array([0, 1, 0]), omega=1, m_pos=0):
+    rs = cp.asarray(rs, dtype='float32')
+    m = cp.asarray(m, dtype='float32')
+    m_pos = cp.asarray(m_pos, dtype='float32')
+    r_r0_norms = cp.linalg.norm(rs - m_pos, axis=1)
+    cross = np.cross(m, (rs - m_pos))
+    r3 = (cp.power(r_r0_norms, 3))
+    b_i = omega * 1e-7 * np.vstack((cross[:, 0] / r3, cross[:, 1] / r3, cross[:, 2] / r3)).T
+    #b_i = omega * 1e-7 * cp.divide(np.cross(m, (rs - m_pos)), (cp.power(r_r0_norms, 3)))
+    return b_i.get()
 
 
 def SCSM_jacobi_iter_debug(tri_centers, areas, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
@@ -1378,9 +1424,8 @@ def SCSM_FMM_E2(Q, r_source, r_target, eps, b_im):
     charges = Q.imag
     fmm_res_phi = fmm.lfmm3d(eps=eps, sources=r_source.T, charges=charges, pg=2, pgt=2, targets=r_target.T)
     grad_phi = -1/(4 * np.pi * eps0) * fmm_res_phi.gradtarg.T
-    for i in range(n):
-                E_v = grad_phi[i] - b_im[i]
-                E[i] = vnorm(E_v)
+    E_v = grad_phi - b_im
+    E = np.linalg.norm(E_v, axis=1)
     return E
 
 @numba.jit(nopython=True, parallel=True)
@@ -2070,3 +2115,10 @@ def layered_sphere_mesh(n_samples, sigmas, radii=np.array([0.8, 0.9, 0.905, 0.91
             sigmas_out[((i) * div):((i + 1) * div)] = 0.0
 
     return tc, areas, tri_points, n_v, sigmas_in, sigmas_out
+
+
+def xyz_grid(r, phi, theta):
+    x = r * np.sin(phi) * np.cos(theta)
+    y = r * np.sin(phi) * np.sin(theta)
+    z = r * np.cos(phi)
+    return np.array([x, y, z])
