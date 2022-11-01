@@ -7,14 +7,15 @@ from pathlib import Path
 import os
 matplotlib.use("TkAgg")
 
-# file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
-file_path = os.path.realpath(Path("C:/Users/User/Downloads"))
+file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
+# file_path = os.path.realpath(Path("C:/Users/User/Downloads"))
 fn = os.path.join(file_path, "15484.08.hdf5")
 fn2 = os.path.join(file_path, "e.hdf5")
 fn3 = "MagVenture_MCF_B65_REF_highres.ccd"
 
 start = time.time()
 print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+# initialize values
 n = 100
 scaling_factor = 1
 r = 0.85 * scaling_factor
@@ -22,23 +23,42 @@ phi1 = np.linspace(0, np.pi, n)
 theta1 = np.linspace(0, 2 * np.pi, n)
 phi2, theta2 = np.meshgrid(phi1, theta1)
 phi, theta = phi2.T, theta2.T
+xyz_grid = xyz_grid(r, phi, theta)
 direction = np.array([1, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm * scaling_factor
+omega = 19e3
+
+# read data for transformation matrix and sigmas
 transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
+# read coil data
 m, m_pos = read_from_ccd(file_path)
+# moving the coil position according to the FEM calculation values
 m_pos = translate(m_pos, transformation_matrix)
+
+# creating a shrinking and moving matrix for the small sphere
+trans_mat1 = np.eye(4)
+trans_mat1[0, 0] = 1/200
+trans_mat1[1, 1] = 1/200
+trans_mat1[2, 2] = 1/200
+trans_mat2 = np.eye(4)
+trans_mat2[3, 0] = 0.4
+trans_mat2[3, 1] = -0.4
+trans_mat2[3, 2] = 0.95
+trans_mat = trans_mat1 @ trans_mat2
+# transforming the coil for the sphere
+m_pos1 = translate(m_pos, trans_mat)
 # m = translate(m, transformation_matrix)
 # np.savetxt("coil0.csv", m_pos0, delimiter=",")
 
-np.savetxt("coil.csv", m_pos, delimiter=",")
+np.savetxt("coil_new.csv", m_pos, delimiter=",")
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
-m_pos = m_pos/200 + 0.75
-
-res1_flat = reciprocity_surface(rs=r_target, r0_v=m_pos, m=m, omega=3e3)
+# m_pos = m_pos/200 + 0.75
+res1_flat = reciprocity_surface(rs=r_target, r0_v=m_pos1, m=m, omega=omega)
 res1 = array_unflatten(res1_flat, n_rows=n)
 #create sphere mesh
 tc, areas, tri_points, n_v = sphere_mesh(1000, scaling=scaling_factor)[:4]
+# array_3d_plot(tc, m_pos1)
 
 # set up realistic sigma values
 div = int(np.floor(tc.shape[0]/5))
@@ -61,31 +81,29 @@ n_elem = tc.shape[0]
 rs = tc
 end = time.time()
 t = t_format(end - start)
-print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
-start = time.time()
+print(f"{t[0]:.2f}" + t[1] + " set-up + analytical solution")
 start = time.time()
 start_sub = start
-b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos, omega=3e3)
+b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos1, omega=omega)
 end_sub = time.time()
 t_sub = t_format(end_sub - start_sub)
 print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
-Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=sigmas_in_test, sig_out=sigmas_out_test, tol=1e-15, n_iter=100,
-                          omega=3e3)
-
-Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=0.33, sig_out=0.00, tol=1e-15, n_iter=100,
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=0.33, sig_out=0.0, tol=5e-14, n_iter=20,
                           omega=3e3)
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
 start = time.time()
 
-b_im_ = vector_potential_for_E(r_target, m=m, m_pos=m_pos, omega=3e3)
+b_im_ = vector_potential_for_E(r_target, m=m, m_pos=m_pos1, omega=omega)
 res_flat = SCSM_FMM_E2(Q=Q, r_source=rs, r_target=r_target, eps=1e-20, b_im=b_im_)
 res = array_unflatten(res_flat, n_rows=n)
 print(f"{res[0, 0]}")
-plot_E_sphere_surf(res1, phi, theta, r)
+plot_E_sphere_surf(res, phi, theta, r, c_map=cm.jet)
+plot_E_sphere_surf_diff(res1, res, xyz_grid=xyz_grid, c_map=cm.jet)
+
 print("---------------------------")
-print(np.linalg.norm(res - res1))
+# print(np.linalg.norm(res - res1))
 
 
 

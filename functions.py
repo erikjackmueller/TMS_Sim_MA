@@ -313,7 +313,7 @@ def reciprocity_sphere(grid, n=100, r0_v=np.array([12, 0, 0]), m=np.array([0, -1
     E = np.zeros([n, n])
     for i in range(n):
         for j in range(n):
-            r_v = np.array([grid[0][i,j],grid[1][i,j],grid[2][i,j]])
+            r_v = np.array([grid[0][i, j], grid[1][i, j],grid[2][i, j]])
             a_v = r0_v - r_v
             a = vnorm(a_v)
             F = (r0 * a + np.dot(r0_v, a_v)) * a
@@ -324,23 +324,32 @@ def reciprocity_sphere(grid, n=100, r0_v=np.array([12, 0, 0]), m=np.array([0, -1
             E[i, j] = vnorm(E_v)
     return E
 
-# @numba.njit(parallel=True)
+# @numba.jit(parallel=True)
 def reciprocity_surface(rs, r0_v=np.array([12, 0, 0]), m=np.array([0, -1, 0]), omega=1):
     M = rs.shape[0]
     mu0 = 4 * np.pi * 1e-7
-    E_v = np.zeros((M, m.shape[0], 3))
+    E = np.zeros(M)
+    # E_v = np.zeros((M, m.shape[0], 3))
+
+    def pdot(a, b):
+        return a[:, 0] * b[:, 0] + a[:, 1] * b[:, 1] + a[:, 2] * b[:, 2]
+
+    def pfact(f, array):
+        return np.vstack((f[:] * array[:, 0], f[:] * array[:, 1],  f[:] * array[:, 2])).T
+
     for i in numba.prange(M):
         r_v = rs[i]
-        for n in numba.prange(m.shape[0]):
-            r0 = np.linalg.norm(r0_v[n])
-            a_v = r0_v[n] - r_v
-            a = np.linalg.norm(a_v)
-            F = (r0 * a + np.dot(r0_v[n], a_v)) * a
-            nab_F = ((a ** 2 / r0 ** 2) + 2 * a + 2 * r0 + (np.dot(r0_v[n], a_v) / a)) * r0_v[n] - (
-                    a + 2 * r0 + (np.dot(r0_v[n], a_v) / a)) * r_v
-            E_v[i][n] = (omega * mu0 / (4 * np.pi * F ** 2) * (F * np.cross(r_v, m[n]) -
-                                                         np.dot(m[n], nab_F) * np.cross(r_v, r0_v[n])))
-    return E_v
+        r0 = np.linalg.norm(r0_v, axis=1)
+        r_v_long = np.tile(r_v, (m.shape[0], 1))
+        a_v = r0_v - r_v
+        a = np.linalg.norm(a_v, axis=1)
+        F = (r0 * a + pdot(r0_v, a_v)) * a
+        nab_F = pfact(((a ** 2 / r0 ** 2) + 2 * a + 2 * r0 + (pdot(r0_v, a_v) / a)), r0_v) - pfact((
+                a + 2 * r0 + (pdot(r0_v, a_v) / a)), r_v_long)
+        E_v = pfact(omega * mu0 / (4 * np.pi * F ** 2), (pfact(F, np.cross(r_v_long, m)) -
+                                                           pfact(pdot(m, nab_F), np.cross(r_v_long, r0_v))))
+        E[i] = np.sum(np.linalg.norm(E_v, axis=1))
+    return E
 
 
 
@@ -608,13 +617,20 @@ def plot_E_sphere_surf(res, phi, theta, r, c_map=cm.plasma):
     fig.colorbar(m, shrink=0.5, pad=0.15)
     plt.show()
 
-def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma, normalize=True, names = ["analytic", "numeric"]):
+def plot_E_sphere_surf_diff(res1, res2, phi=None, theta=None, r=None, xyz_grid=None, c_map=cm.plasma, normalize=True,
+                            names=["analytic", "numeric"]):
     diff = np.abs(res2 - res1)
+    rerror = nrmse(res2, res1) * 100
     fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(14, 5))
     ax1, ax2, ax3 = ax[0], ax[1], ax[2]
-    x = r * np.sin(phi) * np.cos(theta)
-    y = r * np.sin(phi) * np.sin(theta)
-    z = r * np.cos(phi)
+    if xyz_grid is None:
+        x = r * np.sin(phi) * np.cos(theta)
+        y = r * np.sin(phi) * np.sin(theta)
+        z = r * np.cos(phi)
+    else:
+        x = xyz_grid[0]
+        y = xyz_grid[1]
+        z = xyz_grid[2]
 
     if normalize:
         fcolors1 = res1
@@ -639,12 +655,9 @@ def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma, normaliz
         min_vald = diff.min()
         max_vald = diff.max()
 
-    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors1),
-                     norm="Normalise", vmin=min_val1, vmax=max_val1)
-    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2),
-                     norm="Normalise", vmin=min_val2, vmax=max_val2)
-    ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolorsdiff),
-                     norm="Normalise", vmin=min_vald, vmax=max_vald)
+    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors1))
+    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
+    ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolorsdiff))
 
     ax1.set_title(names[0])
     ax2.set_title(names[1])
@@ -653,9 +666,9 @@ def plot_E_sphere_surf_diff(res1, res2, phi, theta, r, c_map=cm.plasma, normaliz
     m = cm.ScalarMappable(cmap=c_map)
     cbar = fig.colorbar(m, shrink=0.5, pad=0.15)
     # cbar.set_label("normalized difference", rotation=270)
-    rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
+    # rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
     fig.suptitle(f"Electric field magnitudes and difference normalized by their respective maximum"
-                 f" \n relative error: {rerror:.4f} %")
+                 f" \n nrmse: {rerror:.4f} %")
     plt.show()
 
 
@@ -799,7 +812,7 @@ def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1
 
     return Q, rs
 
-# @numba.jit(nopython=True, parallel=True)
+@numba.jit(nopython=True, parallel=True)
 def SCSM_matrix(tri_centers, areas, n, b_im=0, sig_in=0.33, sig_out=0.0, omega=1):
     rs = tri_centers
     M = rs.shape[0]
@@ -821,10 +834,10 @@ def SCSM_matrix(tri_centers, areas, n, b_im=0, sig_in=0.33, sig_out=0.0, omega=1
             1 / eps0 / areas)
     for i in numba.prange(M):
 
-        delta_r = rs[i] - rs
-        A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
-        A12 = f * v_vnorm(delta_r) ** 3
-        a_i = A11 / (A12 + 1e-20)
+        # delta_r = rs[i] - rs
+        # A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
+        # A12 = f * v_vnorm(delta_r) ** 3
+        # a_i = A11 / (A12 + 1e-20)
         for j in numba.prange(M):
             a[i, j] = (np.dot((rs[i, :] - rs[j, :]), n[i])) / ((4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)))
     B = 1j * b_im
@@ -878,7 +891,7 @@ def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1])
         x = x_new
     return x
 
-def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0, omega=3e3, n_iter=1000, tol=1e-15,
+def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0, omega=3e3, n_iter=1000, tol=1e-15,
                           high_precision=False):
 
     if high_precision:
@@ -1029,6 +1042,7 @@ def jacobi_vectors_cupy(rs, n, m=np.array([0, 1, 0]), omega=3e3, m_pos=0):
         b_im = b_im + b_i
     return b_im.get()
 
+
 def jacobi_vectors_numpy(rs, n, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), omega=3e3):
     r_r0_norms = np.linalg.norm(rs - r0, axis=1)
     b_im = omega * 1e-7 * np.divide(np.sum(np.cross(m, (rs - r0)) * n, axis=1), (np.power(r_r0_norms, 3)))
@@ -1050,12 +1064,12 @@ def vector_potential_for_E(rs, m=np.array([0, 1, 0]), omega=1, m_pos=0):
     rs = cp.asarray(rs, dtype='float32')
     m = cp.asarray(m, dtype='float32')
     m_pos = cp.asarray(m_pos, dtype='float32')
-    b_im = cp.zeros(rs.shape[0])
+    b_im = cp.zeros((rs.shape[0], 3))
     for i in range(m.shape[0]):
         r_r0_norms = cp.linalg.norm(rs - m_pos[i], axis=1)
         cross = np.cross(m[i], (rs - m_pos[i]))
         r3 = (cp.power(r_r0_norms, 3))
-        b_i = omega * 1e-7 * np.vstack((cross[:, 0] / r3, cross[:, 1] / r3, cross[:, 2] / r3)).T
+        b_i = omega * 1e-7 * pfact(1/r3, cross)
         b_im = b_im + b_i
     return b_im.get()
 
@@ -2079,7 +2093,7 @@ def read_from_ccd(data_path):
     m = data[:, :-3]
     return m, 1000 * m_pos
 
-def array_3d_plot(array):
+def array_3d_plot(array, array1=0):
 
     xs = array[:, 0]
     ys = array[:, 1]
@@ -2087,13 +2101,17 @@ def array_3d_plot(array):
     fig = plt.figure()
     ax = plt.axes(projection="3d")
     ax.scatter3D(xs, ys, zs)
-
+    if type(array1) == np.ndarray:
+        xs1 = array1[:, 0]
+        ys1 = array1[:, 1]
+        zs1 = array1[:, 2]
+        ax.scatter3D(xs1, ys1, zs1)
     plt.show()
 
 def translate(array, transformation_matrix):
     a = np.vstack((array.T, np.ones(array.shape[0]))).T
-    a = transformation_matrix @ a.T
-    res = a[:3].T
+    a = a @ transformation_matrix
+    res = a[:, :3]
     return res
 
 
@@ -2132,3 +2150,25 @@ def xyz_grid(r, phi, theta):
     y = r * np.sin(phi) * np.sin(theta)
     z = r * np.cos(phi)
     return np.array([x, y, z])
+
+def nrmse(refference, res):
+    diff = np.subtract(res, refference)
+    square = np.square(diff)
+    mse = square.mean()
+    rmse = np.sqrt(mse)
+    nrmse = rmse/(np.max(res)-np.min(res))
+    return nrmse
+
+def v_vnorm(x):
+    x = x.T
+    return np.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2).T
+
+def radial_field_norm(E):
+    E_r = v_vnorm(E)
+    return E_r
+
+def pdot(a, b):
+    return a[:, 0] * b[:, 0] + a[:, 1] * b[:, 1] + a[:, 2] * b[:, 2]
+
+def pfact(f, array):
+    return np.vstack((f[:] * array[:, 0], f[:] * array[:, 1],  f[:] * array[:, 2])).T
