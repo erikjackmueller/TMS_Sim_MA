@@ -18,15 +18,16 @@ phi1 = np.linspace(0, np.pi, n)
 theta1 = np.linspace(0, 2 * np.pi, n)
 phi2, theta2 = np.meshgrid(phi1, theta1)
 phi, theta = phi2.T, theta2.T
-direction = np.array([1, 0, 1])
+direction = np.array([0, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm * scaling_factor
-omega = 3e3
-m = d_norm
+omega = 19e3
+# m = d_norm
+m = np.array([1, 0, 0])
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 
 # samples = [1000, 5000, 20000, 50000, 100000, 250000, 850000]
-samples = [400, 1000]
+samples = [20000]
 t_numpy = []
 t_jacobi = []
 errors = []
@@ -64,8 +65,8 @@ for i in range(len(samples)):
         end_sub = time.time()
         t_sub = t_format(end_sub - start_sub)
         print(f"{t_sub[0]:.2f}" + t_sub[1] + "  b calculation")
-        Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
-        # Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-18, n_iter=1000, omega=omega, high_precision=True)
+        # Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
+        Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-15, n_iter=1000, omega=omega, high_precision=True)
         # print(f"{Q[:10]}")
         # Q = SCSM_jacobi_iter_debug(tc, areas, n=n_v, r0=r0, m=m, tol=1e-10, initial_guess=ig, n_iter=20,
         #                      b_im=b_im)
@@ -84,7 +85,7 @@ for i in range(len(samples)):
         # Q = Q_jacobi_numba_cuda(tc, areas, n_v, b_im, tol=1e-10, n_iter=20)
         end = time.time()
         t = t_format(end - start)
-        print(f"{t[0]:.2f}" + t[1] + "  Q jacobi")
+        print(f"{t[0]:.2f}" + t[1] + "  Q calculation")
         t_jacobi.append(t)
         start = time.time()
 

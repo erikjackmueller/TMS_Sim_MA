@@ -26,23 +26,25 @@ sizes = [2964, 1280]
 # man = MyManager()
 # if __name__ == '__main__':
 #     man.start()
-n = 400
+n = 100
 scaling_factor = 1
 r = 0.90 * scaling_factor
 phi1 = np.linspace(0, np.pi, n)
 theta1 = np.linspace(0, 2 * np.pi, n)
 phi2, theta2 = np.meshgrid(phi1, theta1)
 phi, theta = phi2.T, theta2.T
-direction = np.array([1, 0, 1])
+direction = np.array([0, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm * scaling_factor
 # m, m_pos, transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 m = d_norm
+m = np.array([1, 0, 0])
+omega = 18.5e3
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 
 start = time.time()
 time_0 = start
-res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface", omega=3e3)
+res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, projection="sphere_surface", omega=omega)
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " receprocity")
@@ -66,7 +68,7 @@ print(f"elements: {n_elements}")
 start = time.time()
 b_im = jacobi_vectors_numpy(tc, n_v, r0, m)
 # Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-18, n_iter=20)
-Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=3e3)
+Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=omega)
 # Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=3e3)[0]
 
 rs = tc
@@ -76,7 +78,7 @@ print(f"{t[0]:.2f}" + t[1] + " Q jacobi")
 
 start = time.time()
 
-res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-2, m=m, r0=r0, omega=3e3)
+res_flat = SCSM_FMM_E(Q=Q, r_source=rs, r_target=r_target, eps=1e-2, m=m, r0=r0, omega=omega)
 res = array_unflatten(res_flat, n_rows=n)
 # res3 = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta=theta, phi=phi, r0=r0, m=m, projection="sphere_surface")
 # res = functions.SCSM_E_sphere(Q, rs, r, theta, r0=r0, m=m)

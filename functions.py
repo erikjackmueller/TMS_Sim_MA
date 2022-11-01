@@ -799,7 +799,7 @@ def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1
 
     return Q, rs
 
-@numba.jit(nopython=True, parallel=True)
+# @numba.jit(nopython=True, parallel=True)
 def SCSM_matrix(tri_centers, areas, n, b_im=0, sig_in=0.33, sig_out=0.0, omega=1):
     rs = tri_centers
     M = rs.shape[0]
@@ -812,9 +812,19 @@ def SCSM_matrix(tri_centers, areas, n, b_im=0, sig_in=0.33, sig_out=0.0, omega=1
     def kroen(i, j):
         return int(i == j)
 
+    def v_vnorm(x):
+        x = x.T
+        return np.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2).T
+    f = 4 * np.pi * eps0
+
     d = - (((1 / 2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out))) * (
             1 / eps0 / areas)
     for i in numba.prange(M):
+
+        delta_r = rs[i] - rs
+        A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
+        A12 = f * v_vnorm(delta_r) ** 3
+        a_i = A11 / (A12 + 1e-20)
         for j in numba.prange(M):
             a[i, j] = (np.dot((rs[i, :] - rs[j, :]), n[i])) / ((4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)))
     B = 1j * b_im
