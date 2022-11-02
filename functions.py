@@ -2234,8 +2234,8 @@ def Norm_x_y(array, n):
     return out
 
 
-def One_layer_sphere_single_m_test(n, r_out, r_in, m, direction, omega, n_samples, scaling_factor, method, tol=1e16, n_iter=20,
-                                   print_time=True):
+def One_layer_sphere_single_m_test(n, r_out, r_in, m, direction, omega, n_samples, scaling_factor, method, tol=1e16,
+                                   n_iter=20, print_time=True, return_elements_nr=False):
     start = time.time()
 
     # set up ROI grid
@@ -2280,8 +2280,10 @@ def One_layer_sphere_single_m_test(n, r_out, r_in, m, direction, omega, n_sample
     if print_time:
         print(f"simulation time needed: {t[0]:.2f}" + t[1])
 
-    return res1, res, grid
-
+    if not return_elements_nr:
+        return res1, res, grid
+    else:
+        return res1, res, grid, n_elements
 
 def plot_curve(x, y):
     plt.plot(x, y)

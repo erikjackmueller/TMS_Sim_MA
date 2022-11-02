@@ -23,10 +23,10 @@ orientations = ["radial", "tangential"]
 # test r_in jacobi
 # average length: 0.9188807652297692
 # elements: 3983
-value_under_test = 'r_in'
-samples = [300, 600, 1000, 2000, 4000, 8000, 10000, 15000, 20000]
+value_under_test = 'elements'
+samples = [150, 300, 500, 1000, 2000, 4000, 8000, 10000, 12000, 15000, 17000, 20000]
 count = 0
-location = "results/n_samples/"
+location = "results/n_elements/"
 
 # option to overwrite existing files
 overwrite = True
@@ -44,13 +44,14 @@ for orientation in orientations:
             fn_fig = location + "-" + method + "-" + orientation + "-" + value_under_test + \
                      "-" + str(np.round(samples[i], 2)) + ".png"
             if not os.path.isfile(fn_fig) or overwrite:
-                res1, res, xyz_grid = One_layer_sphere_single_m_test(n=n, r_out=r_out, r_in=r_in,
+                res1, res, xyz_grid, n_elements = One_layer_sphere_single_m_test(n=n, r_out=r_out, r_in=r_in,
                                                                      direction=r0_direction, m=m, omega=omega,
-                                                                     n_samples=samples, method=method, tol=5e-16, n_iter=20,
-                                                                     scaling_factor=scaling_factor, print_time=False)
+                                                                     n_samples=samples[i], method=method, tol=5e-16,
+                                                                     n_iter=20, scaling_factor=scaling_factor,
+                                                                     print_time=False, return_elements_nr=True)
 
                 errors.append(np.round(nrmse(res, res1) * 100, 2))
-                values.append(np.round(samples[i], 2))
+                values.append(np.round(n_elements, 2))
                 plot_E_sphere_surf_diff(res1, res, xyz_grid=xyz_grid, c_map=cm.jet,
                                             plot_difference=False, save=True, save_fn=fn_fig)
             count += 1

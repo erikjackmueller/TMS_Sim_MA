@@ -106,3 +106,8 @@ if pythonlabels:
 axs[1, 0].grid()
 axs[1, 0].axhline(y=1, color='r', alpha=0.3)
 plt.show()
+
+value_under_test = 'elements'
+location = "results/n_elements/"
+labels = []
+maxs = []
