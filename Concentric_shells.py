@@ -24,26 +24,28 @@ m = np.array([0, 0, 1])
 omega = 19e3
 xyz_grid = xyz_grid(r, phi, theta)
 # calculate analytic solution
-res1 = reciprocity_sphere(grid=xyz_grid, r0_v=r0, m=m, omega=omega)
+res1 = reciprocity_sphere(grid=xyz_grid, r0_v=r0, m=m, omega=omega)[1]
 
 
 # create concentric sphere meshes with different radii
-radii = np.array([0.8, 0.85, 0.91, 0.915, 1.0])
+radii = np.array([0.7, 0.75, 1.0])
+sigmas = np.array([0.126, 0.001, 0.456])
 # radii = np.array([0.2, 0.4, 0.6, 0.7, 1.0])
-sigmas = np.array([0.126, 0.275, 1.654, 0.001, 0.456])
+# sigmas = np.array([0.126, 0.275, 1.654, 0.001, 0.456])
 # sigmas = np.array([0.126, 0.275, 1.654, 1.0, 0.456])
 # sigmas = 0.33 * np.array([1, 1.01, 1.02, 1.03, 1.04, 1.05])
-tc, areas, tri_points, n_v, sigmas_in, sigmas_out = layered_sphere_mesh(n_samples=2000, sigmas=sigmas, radii=radii)
+tc, areas, tri_points, n_v, avg_lens, sigmas_in, sigmas_out = layered_sphere_mesh(n_samples=30000, sigmas=sigmas, radii=radii)
 print(f"elements: {tc.shape[0]}")
+print(f"average edge length: {avg_lens:.5f}")
 n_elem = tc.shape[0]
 rs = tc
 
 # b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos, omega=omega)
 b_im = jacobi_vectors_numpy(rs, n=n_v, m=m, omega=omega, r0=r0)
 Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, sig_in=sigmas_in, sig_out=sigmas_out, tol=7e-17, n_iter=5,
-                         omega=omega, high_precision=True)
+                         omega=omega, high_precision=True, verbose=True)
 
-tc1, areas1, tri_points1, n_v1, avg_length1 = sphere_mesh(samples=5000, scaling=scaling_factor)
+tc1, areas1, tri_points1, n_v1, avg_length1 = sphere_mesh(samples=2000, scaling=scaling_factor)
 b_im1 = jacobi_vectors_numpy(tc1, n=n_v1, m=m, omega=omega, r0=r0)
 Q2 = SCSM_jacobi_iter_cupy(tc1, areas1, n_v1, b_im1, sig_in=0.33, sig_out=0.00, tol=7e-17, n_iter=5,
                          omega=omega, high_precision=True)
@@ -74,7 +76,7 @@ res3 = array_unflatten(res_flat, n_rows=n)
 # print(f"radial field analytic {radial_field_norm(res)}")
 # print(f"radial field numeric {radial_field_norm(res1)}")
 plot_E_sphere_surf_diff(res1, res, xyz_grid=xyz_grid, names=["analytic", "jacobi"], c_map=cm.jet)
-plot_E_sphere_surf_diff(res, res3, xyz_grid=xyz_grid, names=["jacobi multilayer", "jacobi single "], c_map=cm.jet)
+plot_E_sphere_surf_diff(res3, res, xyz_grid=xyz_grid, names=["jacobi single ", "jacobi multilayer"], c_map=cm.jet)
 # plot_E_sphere_surf_diff(res1, res2, xyz_grid=xyz_grid, names=["analytic", "matrix"], c_map=cm.jet)
 # plot_E_sphere_surf_diff(res, res2, xyz_grid=xyz_grid, names=["jacobi", "matrix"], c_map=cm.jet)
 

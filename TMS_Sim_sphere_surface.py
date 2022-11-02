@@ -4,51 +4,31 @@ import time
 import matplotlib
 matplotlib.use("TkAgg")
 from pathlib import Path
-import multiprocessing.managers
 from matplotlib import cm
 
-
-
-# functions.plot_default()
-# path = os.path.realpath(Path("C:/Users/Besitzer/Downloads/Sphere_642"))
-path = os.path.realpath(Path("C:/Users/Besitzer/Downloads"))
-fn2 = os.path.join(path, "e.hdf5")
-# path = "Sphere_10242"
-# sizes = [10242, 1280]
-path1 = "Sphere_2964"
-sizes = [2964, 1280]
-# path = "Sphere_642"
-# sizes = [642, 1280]
-
-# class MyManager(multiprocessing.managers.BaseManager):
-#     pass
-# MyManager.register('np_zeros', np.zeros, multiprocessing.managers.ArrayProxy)
-# man = MyManager()
-# if __name__ == '__main__':
-#     man.start()
 n = 100
-scaling_factor = 1
-r = 0.90 * scaling_factor
 phi1 = np.linspace(0, np.pi, n)
 theta1 = np.linspace(0, 2 * np.pi, n)
 phi2, theta2 = np.meshgrid(phi1, theta1)
 phi, theta = phi2.T, theta2.T
-direction = np.array([0, 0, 1])
+scaling_factor = 1
+r = 0.9
+xyz_grid = xyz_grid(r, phi, theta)
+direction = np.array([1, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
-r0 = 1.05 * d_norm * scaling_factor
+r0 = 1.05 * d_norm
 # m, m_pos, transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 m = d_norm
-m = np.array([1, 0, 0])
+m = np.array([0, 0, 1])
 omega = 18.5e3
 # omega = 100
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 # r_target = r_target[np.where(r_target[:, 2] > (0.8*r))]
-xyz_grid = xyz_grid(r, phi, theta)
 
 start = time.time()
 time_0 = start
 # calculate analytic solution
-res1 = reciprocity_sphere(grid=xyz_grid, r0_v=r0, m=m, omega=omega)
+res1 = reciprocity_sphere(grid=xyz_grid, r0_v=r0, m=m, omega=omega)[1]
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " receprocity")
@@ -119,10 +99,10 @@ print(f"max_analytic = {max_analytic}, min_analytic = {min_analytic}, max_numeri
 # diff2 = np.abs(res1 - res3)
 # relative_diff2 = diff2 / np.linalg.norm(res1)
 #
-rerror_imag = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
+error_imag = nrmse(res1, res2)
 # rerror_imag2 = np.linalg.norm(diff2) * 100 / np.linalg.norm(res1)
 
-print(f"relative error: {rerror_imag:.7f}%")
+print(f"relative error: {error_imag:.7f}%")
 # print(f"relative error with near field: {rerror_imag2:.7f}%")
 
 # plot_E_sphere_surf(res, phi, theta, r)
