@@ -16,7 +16,7 @@ r = 0.9
 xyz_grid = xyz_grid(r, phi, theta)
 direction = np.array([1, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
-r0 = 1.05 * d_norm
+r0 = 0.105 * d_norm
 # m, m_pos, transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 m = d_norm
 m = np.array([0, 0, 1])

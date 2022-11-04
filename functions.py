@@ -1107,11 +1107,15 @@ def vector_potential_for_E(rs, m=np.array([0, 1, 0]), omega=1, m_pos=0):
     m = cp.asarray(m, dtype='float32')
     m_pos = cp.asarray(m_pos, dtype='float32')
     b_im = cp.zeros((rs.shape[0], 3))
+
+    def cpfact(f, array):
+        return cp.vstack((f[:] * array[:, 0], f[:] * array[:, 1], f[:] * array[:, 2])).T
+
     for i in range(m.shape[0]):
         r_r0_norms = cp.linalg.norm(rs - m_pos[i], axis=1)
         cross = np.cross(m[i], (rs - m_pos[i]))
         r3 = (cp.power(r_r0_norms, 3))
-        b_i = omega * 1e-7 * pfact(1/r3, cross)
+        b_i = omega * 1e-7 * cpfact(1/r3, cross)
         b_im = b_im + b_i
     return b_im.get()
 

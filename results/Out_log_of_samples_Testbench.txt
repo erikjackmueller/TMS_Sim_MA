@@ -1,0 +1,165 @@
+C:\Users\ermu8317\Miniconda3\envs\TMS_mkl2022\python.exe C:/Users/ermu8317/PycharmProjects/TMS_Sim_MA/Results_Testbench_elements.py
+average length: 0.32744466067663813
+elements: 286
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-150
+iteration 1/48 done!
+iteration time needed: 42.22s
+time left approximately: 33.07min
+----------------------------------------------------------
+average length: 0.23618747326976688
+elements: 585
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-300
+iteration 2/48 done!
+iteration time needed: 35.01s
+time left approximately: 26.84min
+----------------------------------------------------------
+average length: 0.18188427467203114
+elements: 983
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-500
+iteration 3/48 done!
+iteration time needed: 32.30s
+time left approximately: 24.23min
+----------------------------------------------------------
+average length: 0.12845441087899154
+elements: 1981
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-1000
+iteration 4/48 done!
+iteration time needed: 33.64s
+time left approximately: 24.67min
+----------------------------------------------------------
+average length: 0.09188807652297691
+elements: 3983
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-2000
+iteration 5/48 done!
+iteration time needed: 36.84s
+time left approximately: 26.40min
+----------------------------------------------------------
+average length: 0.0653405538775628
+elements: 7979
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-4000
+iteration 6/48 done!
+iteration time needed: 36.69s
+time left approximately: 25.69min
+----------------------------------------------------------
+average length: 0.04585407255321352
+elements: 15979
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-8000
+iteration 7/48 done!
+iteration time needed: 52.64s
+time left approximately: 35.97min
+----------------------------------------------------------
+average length: 0.041376070774347885
+elements: 19980
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-10000
+iteration 8/48 done!
+iteration time needed: 1.17min
+time left approximately: 46.94min
+----------------------------------------------------------
+average length: 0.037835363361772824
+elements: 23978
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-12000
+iteration 9/48 done!
+iteration time needed: 1.28min
+time left approximately: 50.10min
+----------------------------------------------------------
+average length: 0.033648846111944755
+elements: 29978
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-15000
+iteration 10/48 done!
+iteration time needed: 1.47min
+time left approximately: 55.87min
+----------------------------------------------------------
+average length: 0.03145565035023747
+elements: 33977
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-17000
+iteration 11/48 done!
+iteration time needed: 1.35min
+time left approximately: 49.78min
+----------------------------------------------------------
+average length: 0.02899763586968242
+elements: 39977
+----------------------------------------------------------
+results/n_elements/-jacobi-radial-elements-20000
+iteration 12/48 done!
+iteration time needed: 1.80min
+time left approximately: 1.08h
+----------------------------------------------------------
+average length: 0.32744466067663813
+elements: 286
+----------------------------------------------------------
+results/n_elements/-matrix-radial-elements-150
+iteration 13/48 done!
+iteration time needed: 40.61s
+time left approximately: 23.69min
+----------------------------------------------------------
+average length: 0.23618747326976688
+elements: 585
+----------------------------------------------------------
+results/n_elements/-matrix-radial-elements-300
+iteration 14/48 done!
+iteration time needed: 34.29s
+time left approximately: 19.43min
+----------------------------------------------------------
+average length: 0.18188427467203114
+elements: 983
+----------------------------------------------------------
+results/n_elements/-matrix-radial-elements-500
+iteration 15/48 done!
+iteration time needed: 31.90s
+time left approximately: 17.54min
+----------------------------------------------------------
+average length: 0.12845441087899154
+elements: 1981
+----------------------------------------------------------
+results/n_elements/-matrix-radial-elements-1000
+iteration 16/48 done!
+iteration time needed: 34.06s
+time left approximately: 18.16min
+----------------------------------------------------------
+average length: 0.09188807652297691
+elements: 3983
+----------------------------------------------------------
+results/n_elements/-matrix-radial-elements-2000
+iteration 17/48 done!
+iteration time needed: 43.14s
+time left approximately: 22.29min
+----------------------------------------------------------
+average length: 0.0653405538775628
+elements: 7979
+----------------------------------------------------------
+results/n_elements/-matrix-radial-elements-4000
+iteration 18/48 done!
+iteration time needed: 1.25min
+time left approximately: 37.62min
+----------------------------------------------------------
+average length: 0.04585407255321352
+elements: 15979
+----------------------------------------------------------
+results/n_elements/-matrix-radial-elements-8000
+iteration 19/48 done!
+iteration time needed: 3.88min
+time left approximately: 1.88h
+----------------------------------------------------------
+average length: 0.041376070774347885
+elements: 19980
+----------------------------------------------------------
+results/n_elements/-matrix-radial-elements-10000
+iteration 20/48 done!
+iteration time needed: 6.21min
+time left approximately: 2.90h
+----------------------------------------------------------
+average length: 0.037835363361772824
+elements: 23978
+
+Process finished with exit code -1073741819 (0xC0000005)

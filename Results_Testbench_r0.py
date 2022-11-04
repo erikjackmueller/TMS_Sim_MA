@@ -24,9 +24,9 @@ orientations = ["radial", "tangential"]
 # average length: 0.9188807652297692
 # elements: 3983
 value_under_test = 'r_out'
-r_outs = np.arange(1.02, 1.14, 0.02)
+r_outs = np.arange(1.02, 1.26, 0.02)
 count = 0
-location = "results/r_out/"
+location = "results/r_out_more/"
 
 # option to overwrite existing files
 overwrite = True

@@ -32,25 +32,27 @@ for i in range(tissue_number + 1):
     sigma_out[np.where(tissue_types == i + 1000)] = sigmas[i]
 m, m_pos_raw = read_from_ccd(path)
 m_pos = translate(m_pos_raw, transformation_matrix)
+omega = 18.85956e3
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " triangulation")
 
 start = time.time()
 # Q, rs = functions.SCSM_tri_sphere(tc, areas, r0=r0, m=m, sig=1)
-b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos, omega=3e3)
+b_im = jacobi_vectors_cupy(rs=tc, n=n_v, m=m, m_pos=m_pos, omega=omega)
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " b calculation")
 start = time.time()
-Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-12, n_iter=20, omega=3e3, sig_in=sigma_in, sig_out=sigma_out)
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-13, n_iter=1, omega=omega, sig_in=sigma_in, sig_out=sigma_out,
+                          verbose=True)
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " Q calculation")
 print(f"Q: {Q[0], Q[-1]}")
 
 start = time.time()
-b_im_ = vector_potential_for_E(rs=r_targets, m=m, m_pos=m_pos, omega=3e3)
+b_im_ = vector_potential_for_E(rs=r_targets, m=m, m_pos=m_pos, omega=omega)
 print(f"b for E: {b_im_[0], b_im_[-1]}")
 # b_im_ = vector_potential_for_E(rs=r_targets, n=n_v, m=m, m_pos=m_pos)
 res = SCSM_FMM_E2(Q=Q, r_source=tc, r_target=r_targets, eps=1e-15, b_im=b_im_)

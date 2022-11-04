@@ -24,7 +24,8 @@ orientations = ["radial", "tangential"]
 # average length: 0.9188807652297692
 # elements: 3983
 value_under_test = 'elements'
-samples = [150, 300, 500, 1000, 2000, 4000, 8000, 10000, 12000, 15000, 17000, 20000]
+samples = [100, 150, 300, 350, 500, 750, 1000, 1500, 2000, 2500, 4000, 6000, 8000, 10000, 12000, 15000,
+           17000, 20000]
 count = 0
 location = "results/n_elements/"
 
@@ -40,39 +41,43 @@ for orientation in orientations:
         errors = []
         values = []
         for i in range(len(samples)):
-            start = time.time()
-            fn_fig = location + "-" + method + "-" + orientation + "-" + value_under_test + \
-                     "-" + str(np.round(samples[i], 2)) + ".png"
-            if not os.path.isfile(fn_fig) or overwrite:
-                res1, res, xyz_grid, n_elements = One_layer_sphere_single_m_test(n=n, r_out=r_out, r_in=r_in,
-                                                                     direction=r0_direction, m=m, omega=omega,
-                                                                     n_samples=samples[i], method=method, tol=5e-16,
-                                                                     n_iter=20, scaling_factor=scaling_factor,
-                                                                     print_time=False, return_elements_nr=True)
+            if method == 'matrix' and samples[i] > 10000:
+                pass
+            else:
+                start = time.time()
+                fn_fig = location + "-" + method + "-" + orientation + "-" + value_under_test + \
+                         "-" + str(np.round(samples[i], 2)) + ".png"
+                if not os.path.isfile(fn_fig) or overwrite:
+                    res1, res, xyz_grid, n_elements = One_layer_sphere_single_m_test(n=n, r_out=r_out, r_in=r_in,
+                                                                         direction=r0_direction, m=m, omega=omega,
+                                                                         n_samples=samples[i], method=method, tol=5e-16,
+                                                                         n_iter=20, scaling_factor=scaling_factor,
+                                                                         print_time=False, return_elements_nr=True)
 
-                errors.append(np.round(nrmse(res, res1) * 100, 2))
-                values.append(np.round(n_elements, 2))
-                plot_E_sphere_surf_diff(res1, res, xyz_grid=xyz_grid, c_map=cm.jet,
-                                            plot_difference=False, save=True, save_fn=fn_fig)
-            count += 1
-            print("----------------------------------------------------------")
-            end = time.time()
-            time_needed = end-start
-            t = t_format(end - start)
-            iter_left = (2 * 2 * len(samples)) - count
-            t_left = t_format(time_needed * iter_left)
-            print(fn_fig[:-4])
-            print(f"iteration {count}/{2 * 2 * len(samples)} done!")
-            print(f"iteration time needed: {t[0]:.2f}" + t[1])
-            print(f"time left approximately: {t_left[0]:.2f}" + t_left[1])
-            print("----------------------------------------------------------")
+                    errors.append(np.round(nrmse(res, res1) * 100, 2))
+                    values.append(np.round(n_elements, 2))
+                    plot_E_sphere_surf_diff(res1, res, xyz_grid=xyz_grid, c_map=cm.jet,
+                                                plot_difference=False, save=True, save_fn=fn_fig)
+                count += 1
+                print("----------------------------------------------------------")
+                end = time.time()
+                time_needed = end-start
+                t = t_format(end - start)
+                iter_left = (2 * 2 * len(samples)) - count
+                t_left = t_format(time_needed * iter_left)
+                print(fn_fig[:-4])
+                print(f"iteration {count}/{2 * 2 * len(samples)} done!")
+                print(f"iteration time needed: {t[0]:.2f}" + t[1])
+                print(f"time left approximately: {t_left[0]:.2f}" + t_left[1])
+                print("----------------------------------------------------------")
 
-        fn_error = location + "-" + method + "-" + orientation + "-" + value_under_test + "_test_errors.csv"
-        if not os.path.isfile(fn_error) or overwrite:
-            np.savetxt(fn_error, np.array(errors), delimiter=",")
-        fn_values = location + "-" + method + "-" + orientation + "-" + value_under_test + "_test_values.csv"
-        if not os.path.isfile(fn_values) or overwrite:
-            np.savetxt(fn_values, np.array(values), delimiter=",")
+            fn_error = location + "-" + method + "-" + orientation + "-" + value_under_test + "_test_errors.csv"
+            if not os.path.isfile(fn_error) or overwrite:
+                np.savetxt(fn_error, np.array(errors), delimiter=",")
+            fn_values = location + "-" + method + "-" + orientation + "-" + value_under_test + "_test_values.csv"
+            if not os.path.isfile(fn_values) or overwrite:
+                np.savetxt(fn_values, np.array(values), delimiter=",")
+
 
 
 # tracemalloc.start()
