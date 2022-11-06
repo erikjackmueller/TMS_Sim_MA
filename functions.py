@@ -644,7 +644,7 @@ def plot_E_sphere_surf(res, phi, theta, r, c_map=cm.plasma):
     plt.show()
 
 def plot_E_sphere_surf_diff(res1, res2, phi=None, theta=None, r=None, xyz_grid=None, c_map=cm.plasma, normalize=True,
-                            names=["analytic", "numeric"], save=False, save_fn=None, plot_difference=True):
+                            names=["analytic", "numeric"], save=False, save_fn=None, plot_difference=True, title=True):
     diff = np.abs(res2 - res1)
     rerror = nrmse(res2, res1) * 100
     if plot_difference:
@@ -688,12 +688,14 @@ def plot_E_sphere_surf_diff(res1, res2, phi=None, theta=None, r=None, xyz_grid=N
     ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors1))
     ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
 
-    ax1.set_title(names[0])
-    ax2.set_title(names[1])
+    if title:
+        ax1.set_title(names[0])
+        ax2.set_title(names[1])
 
     if plot_difference:
         ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolorsdiff))
-        ax3.set_title("difference")
+        if title:
+            ax3.set_title("difference")
 
     # ax.grid()
     m = cm.ScalarMappable(cmap=c_map)
@@ -704,7 +706,8 @@ def plot_E_sphere_surf_diff(res1, res2, phi=None, theta=None, r=None, xyz_grid=N
         diff_str = "and difference"
     else:
         diff_str = " "
-    fig.suptitle(f"normalized Electric fields " + diff_str + f" \n nrmse: {rerror:.4f} %")
+    if title:
+        fig.suptitle(f"normalized Electric fields " + diff_str + f" \n nrmse: {rerror:.4f} %")
     if not save:
         plt.show()
     else:
@@ -865,24 +868,13 @@ def SCSM_matrix(tri_centers, areas, n, b_im=0, sig_in=0.33, sig_out=0.0, omega=1
     def kroen(i, j):
         return int(i == j)
 
-    def v_vnorm(x):
-        x = x.T
-        return np.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2).T
-    f = 4 * np.pi * eps0
-
     d = - (((1 / 2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out))) * (
             1 / eps0 / areas)
     for i in numba.prange(M):
-
-        # delta_r = rs[i] - rs
-        # A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
-        # A12 = f * v_vnorm(delta_r) ** 3
-        # a_i = A11 / (A12 + 1e-20)
         for j in numba.prange(M):
             a[i, j] = (np.dot((rs[i, :] - rs[j, :]), n[i])) / ((4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j)))
     B = 1j * b_im
     A = a + np.diag(d)
-    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
     Q = np.linalg.solve(A, B)
     return Q
 
@@ -928,6 +920,81 @@ def SCSM_jacobi_iter(tri_centers, tri_points, areas, n, r0=np.array([0, 0, 1.1])
                 break
         if vnorm(x - x_new) < tol:
             break
+        x = x_new
+    return x
+
+def SCSM_jacobi_iter_numpy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0, omega=3e3, n_iter=1000, tol=1e-15,
+                          high_precision=False, verbose=False):
+    rs = tri_centers
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+
+    # a_ii = - ( ((1/2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out)) ) * (1 / eps0 / areas)
+
+    x = np.zeros(M, dtype=np.complex_)
+    for i_iter in numba.prange(n_iter):
+        x_new = np.zeros_like(x)
+        for i in numba.prange(M):
+            a_i = np.zeros(M)
+            for j in numba.prange(M):
+                A11 = np.dot((rs[i, :] - rs[j, :]), n[i])
+                A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
+                A1 = A11 / A12
+                a_i[j] = A1
+            a_ii = -1 / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig_in))
+            b_i = 1j * b_im[i]
+            s1 = np.dot(a_i[:i], x[:i])
+            s2 = np.dot(a_i[i + 1:], x[i + 1:])
+            x_new[i] = (b_i - s1 - s2) / a_ii
+        if vnorm(x - x_new) < tol:
+            if verbose:
+                print(f"jacobi converged after {i_iter + 1} iterations with error norm {vnorm(x - x_new):.2g}")
+            break
+        else:
+            if verbose:
+                print(f"x_new = {x_new[:2]}")
+                # if i_iter == 0:
+                # print(f"a_ii[-1] = {a_ii[-1]}, a_i[-2] = {a_i[-2]}")
+                print(f"iteration {i_iter + 1} / {n_iter} with error norm {vnorm(x - x_new):.2g}")
+            if i_iter == (n_iter - 1):
+                print(f"jacobi did not converge, maximum number of {n_iter} iterations was reached")
+        x = x_new
+    return x
+
+def SCSM_jacobi_iter_vec_numpy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0, omega=3e3, n_iter=1000, tol=1e-15,
+                          high_precision=False, verbose=False):
+    rs = tri_centers
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+
+    a_ii = - ( ((1/2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out)) ) * (1 / eps0 / areas)
+
+    x = (1j * b_im) / a_ii
+    f = 4 * np.pi * eps0
+    for i_iter in numba.prange(n_iter):
+        x_new = np.zeros_like(x)
+        for i in numba.prange(M):
+            delta_r = rs[i] - rs
+            A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
+            A12 = f * v_vnorm(delta_r) ** 3
+            a_i = A11 / (A12 + 1e-20)
+            b_i = 1j * b_im[i]
+            s1 = np.dot(a_i[:i], x[:i])
+            s2 = np.dot(a_i[i + 1:], x[i + 1:])
+            x_new[i] = (b_i - s1 - s2) / a_ii[i]
+
+        if vnorm(x - x_new) < tol:
+            if verbose:
+                print(f"jacobi converged after {i_iter + 1} iterations with error norm {vnorm(x - x_new):.2g}")
+            break
+        else:
+            if verbose:
+                print(f"x_new = {x_new[:2]}")
+                # if i_iter == 0:
+                # print(f"a_ii[-1] = {a_ii[-1]}, a_i[-2] = {a_i[-2]}")
+                print(f"iteration {i_iter + 1} / {n_iter} with error norm {vnorm(x - x_new):.2g}")
+            if i_iter == (n_iter - 1):
+                print(f"jacobi did not converge, maximum number of {n_iter} iterations was reached")
         x = x_new
     return x
 

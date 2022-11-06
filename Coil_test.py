@@ -7,8 +7,8 @@ from pathlib import Path
 import os
 matplotlib.use("TkAgg")
 
-file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
-# file_path = os.path.realpath(Path("C:/Users/User/Downloads"))
+# file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
+file_path = os.path.realpath(Path("C:/Users/User/Downloads"))
 fn = os.path.join(file_path, "15484.08.hdf5")
 fn2 = os.path.join(file_path, "e.hdf5")
 fn3 = "MagVenture_MCF_B65_REF_highres.ccd"
@@ -24,10 +24,7 @@ theta1 = np.linspace(0, 2 * np.pi, n)
 phi2, theta2 = np.meshgrid(phi1, theta1)
 phi, theta = phi2.T, theta2.T
 xyz_grid = xyz_grid(r, phi, theta)
-direction = np.array([1, 0, 1])
-d_norm = direction/np.linalg.norm(direction)
-r0 = 1.05 * d_norm * scaling_factor
-omega = 19e3
+omega = 18.85956e3
 
 # read data for transformation matrix and sigmas
 transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
@@ -62,22 +59,6 @@ res12 = array_unflatten(res1_flat, n_rows=n)
 tc, areas, tri_points, n_v = sphere_mesh(2000, scaling=scaling_factor)[:4]
 # array_3d_plot(tc, m_pos1)
 
-# set up realistic sigma values
-div = int(np.floor(tc.shape[0]/5))
-sigmas_in_test = np.zeros(tc.shape[0])
-sigmas_in_test[:div] = 0.126
-sigmas_in_test[div:(2*div)] = 0.275
-sigmas_in_test[(2*div):(3*div)] = 1.654
-sigmas_in_test[(3*div):(4*div)] = 0.001
-sigmas_in_test[(4*div):(5*div + 1)] = 0.456
-sigmas_out_test = np.zeros_like(sigmas_in_test)
-sigmas_out_test[:div] = 0.275
-sigmas_out_test[div:(2*div)] = 1.654
-sigmas_out_test[(2*div):(3*div)] = 0.001
-sigmas_out_test[(3*div):(4*div)] = 0.456
-sigmas_out_test[(4*div):(5*div + 1)] = 0.000
-
-
 print(f"elements: {tc.shape[0]}")
 n_elem = tc.shape[0]
 rs = tc
@@ -102,7 +83,7 @@ res_flat = SCSM_FMM_E2(Q=Q, r_source=rs, r_target=r_target, eps=1e-20, b_im=b_im
 res = array_unflatten(res_flat, n_rows=n)
 print(f"error: {nrmse(res1, res)*100:.2f}%")
 # plot_E_sphere_surf(res, phi, theta, r, c_map=cm.jet)
-plot_E_sphere_surf_diff(res1, res, xyz_grid=xyz_grid, c_map=cm.jet)
+plot_E_sphere_surf_diff(res1, res, xyz_grid=xyz_grid, c_map=cm.jet, title=False)
 
 print("---------------------------")
 # print(np.linalg.norm(res - res1))

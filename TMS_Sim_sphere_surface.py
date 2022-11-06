@@ -14,13 +14,15 @@ phi, theta = phi2.T, theta2.T
 scaling_factor = 1
 r = 0.9
 xyz_grid = xyz_grid(r, phi, theta)
-direction = np.array([1, 0, 1])
+
+direction = np.array([0, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
-r0 = 0.105 * d_norm
+r0 = 1.05 * d_norm
 # m, m_pos, transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
-m = d_norm
+# m = d_norm
 m = np.array([0, 0, 1])
-omega = 18.5e3
+omega = 3e3
+# omega = 18.85956e3
 # omega = 100
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 # r_target = r_target[np.where(r_target[:, 2] > (0.8*r))]
@@ -53,8 +55,9 @@ print(f"elements: {n_elements}")
 start = time.time()
 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
 # Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
-Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=omega)
-# Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=3e3)[0]
+# Q = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+# Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=omega)
+Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
 
 rs = tc
 end = time.time()
@@ -99,7 +102,7 @@ print(f"max_analytic = {max_analytic}, min_analytic = {min_analytic}, max_numeri
 # diff2 = np.abs(res1 - res3)
 # relative_diff2 = diff2 / np.linalg.norm(res1)
 #
-error_imag = nrmse(res1, res2)
+error_imag = nrmse(res1, res2) * 100
 # rerror_imag2 = np.linalg.norm(diff2) * 100 / np.linalg.norm(res1)
 
 print(f"relative error: {error_imag:.7f}%")
