@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 
 
 # fig = plt.figure(figsize=(600, 1000))
-fig, axs = plt.subplots(figsize=(12, 14), nrows=2, ncols=2)
+fig, axs = plt.subplots(figsize=(9, 7), nrows=2, ncols=2)
 methods = ["jacobi", "matrix"]
 orientations = ["radial", "tangential"]
-pythonlabels = True
+pythonlabels = False
 yticks = np.arange(15, 0.0, -1.0)
 
 #
@@ -28,20 +28,27 @@ for orientation in orientations:
                             delimiter=",")
         maxs.append(errors.max())
         axs[0, 0].plot(values, errors, 'x--', alpha=0.9)
-        labels.append(method + ", " + orientation)
+        if method == 'jacobi':
+            labels.append('Jacobi' + ", " + orientation)
+        else:
+            labels.append('LU' + ", " + orientation)
 y_max = np.max(np.array(maxs))
 x_max = np.max(values)
 x_min = np.min(values)
 
-axs[0, 0].legend(labels)
+axs[0, 0].legend(labels, fontsize=9)
 axs[0, 0].set_yticks(yticks)
 axs[0, 0].set_xticks(values)
 if pythonlabels:
     axs[0, 0].set_ylabel("nrmse")
+else:
+    axs[0, 0].set_ylabel(" ")
 axs[0, 0].set_ylim(0, y_max + 1)
 axs[0, 0].set_xlim(x_min - 5e-3, x_max + 5e-3)
 if pythonlabels:
     axs[0, 0].set_xlabel("r_in")
+else:
+    axs[0, 0].set_xlabel(" ")
 axs[0, 0].grid()
 axs[0, 0].axhline(y=1, color='r', alpha=0.3)
 
@@ -58,20 +65,31 @@ for orientation in orientations:
                             delimiter=",")
         maxs.append(errors.max())
         axs[0, 1].plot(values, errors, 'x--', alpha=0.9)
-        labels.append(method + ", " + orientation)
+        if method == 'jacobi':
+            labels.append('Jacobi' + ", " + orientation)
+        else:
+            labels.append('LU' + ", " + orientation)
 y_max = np.max(np.array(maxs))
 x_max = np.max(values)
 x_min = np.min(values)
 
-axs[0, 1].legend(labels)
+axs[0, 1].legend(labels, fontsize=9)
 axs[0, 1].set_yticks(yticks)
 axs[0, 1].set_xticks(values)
+x_labels = [str(x) for x in values]
+for idx in [1, 3, 5, 6, 8, 10]:
+    x_labels[idx] = ""
+axs[0, 1].set_xticklabels(x_labels)
 if pythonlabels:
     axs[0, 1].set_ylabel("nrmse")
+else:
+    axs[0, 1].set_ylabel(" ")
 axs[0, 1].set_ylim(0, y_max + 2)
 axs[0, 1].set_xlim(x_min - 2e-3, x_max + 2e-3)
 if pythonlabels:
     axs[0, 1].set_xlabel("r_out")
+else:
+    axs[0, 1].set_xlabel(" ")
 axs[0, 1].grid()
 axs[0, 1].axhline(y=1, color='r', alpha=0.3)
 
@@ -88,21 +106,28 @@ for orientation in orientations:
                             delimiter=",")
         maxs.append(errors.max())
         axs[1, 0].plot(values, errors, 'x--', alpha=0.9)
-        labels.append(method + ", " + orientation)
+        if method == 'jacobi':
+            labels.append('Jacobi' + ", " + orientation)
+        else:
+            labels.append('LU' + ", " + orientation)
 y_max = np.max(np.array(maxs))
 x_max = np.max(values)
 x_min = np.min(values)
 
-axs[1, 0].legend(labels)
+axs[1, 0].legend(labels, fontsize=9)
 axs[1, 0].set_yticks(yticks)
 axs[1, 0].set_xticks(values)
 if pythonlabels:
     axs[1, 0].set_ylabel("nrmse")
+else:
+    axs[1, 0].set_ylabel(" ")
 axs[1, 0].set_ylim(0, y_max + 2)
 axs[1, 0].set_xscale('log')
 axs[1, 0].set_xlim(x_min - 0.15, x_max + 1.5e3)
 if pythonlabels:
     axs[1, 0].set_xlabel("f")
+else:
+    axs[1, 0].set_xlabel(" ")
 # axs[1, 0].grid(True, which="both")
 axs[1, 0].grid()
 axs[1, 0].axhline(y=1, color='r', alpha=0.3)
@@ -121,18 +146,23 @@ for orientation in orientations:
 
         maxs.append(errors.max())
         axs[1, 1].plot(values, errors, 'x--', alpha=0.9)
-        labels.append(method + ", " + orientation)
+        if method == 'jacobi':
+            labels.append('Jacobi' + ", " + orientation)
+        else:
+            labels.append('LU' + ", " + orientation)
         if method == 'jacobi':
             val_jac = values
 
 y_max = np.max(np.array(maxs))
 x_max = np.max(val_jac)
 x_min = np.min(val_jac)
-axs[1, 1].legend(labels)
+axs[1, 1].legend(labels, fontsize=9)
 axs[1, 1].set_yticks(yticks)
 axs[1, 1].set_xticks(values)
 if pythonlabels:
     axs[1, 1].set_ylabel("nrmse")
+else:
+    axs[1, 1].set_ylabel(" ")
 axs[1, 1].set_ylim(0, y_max + 2)
 axs[1, 1].set_xscale('log')
 # xticks_1 = np.array([100, 300, 600, 1000, 2000, 4000, 8000, 10000, 20000, 30000, 40000])
@@ -147,6 +177,9 @@ axs[1, 1].set_xscale('log')
 axs[1, 1].set_xlim(1e2, x_max + 4e3)
 if pythonlabels:
     axs[1, 1].set_xlabel("number of elements")
+else:
+    axs[1, 1].set_xlabel(" ")
 axs[1, 1].grid(True, which="both")
 axs[1, 1].axhline(y=1, color='r', alpha=0.3)
+fig.tight_layout()
 plt.show()

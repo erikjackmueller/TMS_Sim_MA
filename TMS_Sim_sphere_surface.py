@@ -38,7 +38,7 @@ print(f"{t[0]:.2f}" + t[1] + " receprocity")
 start = time.time()
 # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
 # tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
-tc, areas, tri_points, n_v, avg_len = sphere_mesh(2000, scaling=scaling_factor)
+tc, areas, tri_points, n_v, avg_len = sphere_mesh(10000, scaling=scaling_factor)
 print(f"average length: {avg_len}")
 end = time.time()
 t = t_format(end - start)
@@ -46,27 +46,21 @@ print(f"{t[0]:.2f}" + t[1] + " triangulation")
 n_elements = tc.shape[0]
 print(f"elements: {n_elements}")
 
-# start = time.time()
-# Q, rs = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)
-# end = time.time()
-# t = t_format(end - start)
-# print(f"{t[0]:.2f}" + t[1] + "  Q linalg.solve()")
-
 start = time.time()
 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-# Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
 # Q = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
 # Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=omega)
-Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
+# Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
 
 rs = tc
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " Q jacobi")
-
+b_im_ = vector_potential_for_E_single_m(rs=r_target, m=m, m_pos=r0, omega=omega)
 start = time.time()
 
-b_im_ = vector_potential_for_E_single_m(rs=r_target, m=m, m_pos=r0, omega=omega)
+
 res_flat = SCSM_FMM_E2(Q=Q, r_source=tc, r_target=r_target, eps=1e-15, b_im=b_im_)
 res = array_unflatten(res_flat, n_rows=n)
 # res3 = functions.parallel_SCSM_E_sphere(man, Q, rs, r, theta=theta, phi=phi, r0=r0, m=m, projection="sphere_surface")

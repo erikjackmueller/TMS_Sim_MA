@@ -173,6 +173,7 @@ def read_mesh_from_hdf5(fn, mode="source"):
         n_v = np.zeros_like(triangle_centers)
 
         triangle_points = np.zeros((n, 3, 3))
+        edge_lens = np.zeros((n))
         for i in range(n):
             p1 = node_coords[int(points[i, 0]), :]
             p2 = node_coords[int(points[i, 1]), :]
@@ -184,8 +185,11 @@ def read_mesh_from_hdf5(fn, mode="source"):
             triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
             line1_2 = p2 - p1
             line1_3 = p3 - p1
+            line2_3 = p3 - p2
             areas[i] = 0.5 * np.linalg.norm(np.cross(line1_2, line1_3))
             n_v[i] = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+            edge_lens[i] = 1 / 3 * (np.linalg.norm(line1_2) + np.linalg.norm(line1_3) + np.linalg.norm(line2_3))
+        avg_length = np.mean(edge_lens)
         return triangle_centers, areas, triangle_points, n_v, tri_tissue_type
 
     elif mode == "target":
@@ -2233,6 +2237,12 @@ def translate(array, transformation_matrix):
     a = np.vstack((array.T, np.ones(array.shape[0]))).T
     a = a @ transformation_matrix
     res = a[:, :3]
+    return res
+
+def translate_old(array, transformation_matrix):
+    a = np.vstack((array.T, np.ones(array.shape[0]))).T
+    a = transformation_matrix @ a.T
+    res = a[:3].T
     return res
 
 

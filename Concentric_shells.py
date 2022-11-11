@@ -64,7 +64,7 @@ else:
 # create concentric sphere meshes with different radii
 # radii = np.array([0.7, 0.8, 1.0])
 # sigmas = np.array([0.126, 0.001, 0.456])
-radii = np.array([0.2, 0.4, 0.60, 0.7, 1.0])
+radii = np.array([0.2, 0.4, 0.69, 0.7, 1.0])
 sigmas = np.array([0.126, 0.275, 1.654, 0.001, 0.456])
 # sigmas = np.array([0.126, 0.275, 1.654, 1.0, 0.456])
 # sigmas = 0.33 * np.array([1, 1.01, 1.02, 1.03, 1.04, 1.05])

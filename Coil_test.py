@@ -7,8 +7,8 @@ from pathlib import Path
 import os
 matplotlib.use("TkAgg")
 
-# file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
-file_path = os.path.realpath(Path("C:/Users/User/Downloads"))
+file_path = os.path.realpath(Path("C:/Users/ermu8317/Downloads"))
+# file_path = os.path.realpath(Path("C:/Users/User/Downloads"))
 fn = os.path.join(file_path, "15484.08.hdf5")
 fn2 = os.path.join(file_path, "e.hdf5")
 fn3 = "MagVenture_MCF_B65_REF_highres.ccd"
@@ -31,7 +31,9 @@ transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 # read coil data
 m, m_pos = read_from_ccd(file_path)
 # moving the coil position according to the FEM calculation values
-m_pos = translate(m_pos, transformation_matrix)
+m_pos = translate_old(m_pos, transformation_matrix)
+# m_pos = translate(m_pos, transformation_matrix)
+np.savetxt("coil_new.csv", m_pos, delimiter=",")
 
 # creating a shrinking and moving matrix for the small sphere
 trans_mat1 = np.eye(4)
@@ -46,7 +48,7 @@ trans_mat = trans_mat1 @ trans_mat2
 # transforming the coil for the sphere
 m_pos1 = translate(m_pos, trans_mat)
 
-np.savetxt("coil_new.csv", m_pos, delimiter=",")
+
 # m_pos1 = m_pos1[:50]
 # m = m[:50]
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())

@@ -31,7 +31,7 @@ for i in range(tissue_number + 1):
     sigma_in[np.where(tissue_types == i + 1000)] = sigmas[i - 1]
     sigma_out[np.where(tissue_types == i + 1000)] = sigmas[i]
 m, m_pos_raw = read_from_ccd(path)
-m_pos = translate(m_pos_raw, transformation_matrix)
+m_pos = translate_old(m_pos_raw, transformation_matrix)
 omega = 18.85956e3
 end = time.time()
 t = t_format(end - start)
@@ -44,7 +44,7 @@ end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " b calculation")
 start = time.time()
-Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-13, n_iter=1, omega=omega, sig_in=sigma_in, sig_out=sigma_out,
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=1e-14, n_iter=10, omega=omega, sig_in=sigma_in, sig_out=sigma_out,
                           verbose=True)
 end = time.time()
 t = t_format(end - start)
