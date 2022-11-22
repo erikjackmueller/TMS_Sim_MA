@@ -8,38 +8,46 @@ import matplotlib.pyplot as plt
 
 
 small = True
-fig, axs = plt.subplots(figsize=(10, 6), nrows=2, ncols=1)
-elements = np.array([487, 983, 1484, 1981, 2984, 3983])
-memory = np.loadtxt("results/Q_benchmark_memory", delimiter=",")
-#fix cupy JIT
-memory[4, 0] = 1/8 * memory[4, 0]
-time = np.loadtxt("results/Q_benchmark_time", delimiter=",")
-elements = np.loadtxt("results/Q_benchmark_elements", delimiter=",")
+fig, axs = plt.subplots(figsize=(9, 6), nrows=2, ncols=1)
+# elements = np.array([487, 983, 1484, 1981, 2984, 3983])
+# memory = np.loadtxt("results/Q_benchmark_memory", delimiter=",")
+# time = np.loadtxt("results/Q_benchmark_time", delimiter=",")
+# elements = np.loadtxt("results/Q_benchmark_elements", delimiter=",")
+memory = np.loadtxt("Q_benchmark_memory", delimiter=",")
+time = np.loadtxt("Q_benchmark_time", delimiter=",")
+elements = np.loadtxt("Q_benchmark_elements", delimiter=",")
 memory_large = np.loadtxt("results/Q_benchmark_large_samples_memory", delimiter=",")
 time_large = np.loadtxt("results/Q_benchmark_large_samples_time", delimiter=",")
 time_large[0, 0] = time_large[0, 0]/5
 elements_large = np.loadtxt("results/Q_benchmark_large_samples_elements", delimiter=",")
-width = 50
-widths = 1/2*np.array([1000, 2500, 5000, 25000, 50000])
-axs[0].set_ylabel("peak memory usage in MB", fontsize=14)
-axs[1].set_ylabel("t in s", fontsize=14)
+# fig hotfix
+elements_large = np.sort(np.concatenate((elements_large, np.array([40000]))))
+time_large = np.vstack((np.sort(np.concatenate((time_large[0], np.array([239.4])))),
+                        np.sort(np.concatenate((time_large[1], np.array([147]))))))[:, 0:]
+memory_large = np.vstack((np.sort(np.concatenate((memory_large[0], np.array([4.944])))),
+                          np.sort(np.concatenate((memory_large[1], np.array([2.7465]))))))[:, 0:]
+width = 60
+widths = 1/3.5*np.array([1000, 2500, 5000, 10000, 20000, 50000, 100000])
+# axs[0].set_ylabel("peak memory usage in MB", fontsize=14)
+# axs[1].set_ylabel("t in s", fontsize=14)
 y_ticks = [1, 10, 60, 600, 3600, 5*3600]
 y_labels = ["1s", "10s", "1 min", "10 min", "1h", "5h"]
+length = elements.shape[0]
 if small:
-        axs[0].set_ylim([1e-2, 1e4])
+        axs[0].set_ylim([1e-2, 1e8])
         axs[1].set_ylim([1e-1, 2e3])
         for i in range(5):
-                axs[0].bar(elements - 115 + ((15 +width)*i), memory[i], width=width, edgecolor='black')
-                axs[1].bar(elements - 115 + ((15 +width)*i), time[i], width=width, edgecolor='black')
+                axs[0].bar(elements - 130 + ((12 +width)*i), memory[i], width=width, edgecolor='black')
+                axs[1].bar(elements - 130 + ((12 +width)*i), time[i], width=width, edgecolor='black')
 
 else:
         axs[0].set_ylim([1e-1, 1e2])
         axs[1].set_ylim([1, 1e5])
 
-        axs[0].bar(elements_large[:5] - 0.4*widths, memory_large[0][:5], width=0.8*widths, edgecolor='black', color='red')
-        axs[1].bar(elements_large[:5] - 0.4*widths, time_large[0][:5], width=0.8*widths, edgecolor='black', color='red')
-        axs[0].bar(elements_large[:5] + 0.6*widths, memory_large[1][:5], width=widths, edgecolor='black', color='purple')
-        axs[1].bar(elements_large[:5] + 0.6*widths, time_large[1][:5], width=widths, edgecolor='black', color='purple')
+        axs[0].bar(elements_large - 0.4*widths, memory_large[0], width=0.8*widths, edgecolor='black', color='red')
+        axs[1].bar(elements_large - 0.4*widths, time_large[0], width=0.8*widths, edgecolor='black', color='red')
+        axs[0].bar(elements_large + 0.6*widths, memory_large[1], width=widths, edgecolor='black', color='purple')
+        axs[1].bar(elements_large + 0.6*widths, time_large[1], width=widths, edgecolor='black', color='purple')
         # axs[0].plot(elements_large[:5], memory_large[0][:5], "x--", alpha=0.9, lw=2, color='red')
         # axs[1].plot(elements_large[:5], time_large[0][:5], "x--", alpha=0.9, lw=2, color='red')
         # axs[0].plot(elements_large[:5], memory_large[1][:5], "x--", alpha=0.9, lw=2, color='purple')
@@ -49,12 +57,12 @@ if small:
                 axs[j].set_yscale("log")
                 axs[j].set_axisbelow(True)
                 axs[j].grid(True, which='both', axis='y', zorder=-25.0)
-                axs[j].set_xlabel("number of elements", fontsize=14)
+                # axs[j].set_xlabel("number of elements", fontsize=14)
                 # axs[j].legend(["python loop", "numba", "jacobi", "vectorized jacobi", "vectorized jacobi (cupy)"],
                 #               loc="upper left", fontsize=9)
                 axs[j].legend(["Python", "numba", "Jacobi", "v-Jacobi", "v-Jacobi (cupy)"],
                               loc="upper center", fontsize=10)
-                axs[j].set_xlim([300, 4500])
+                axs[j].set_xlim([1800, 4200])
         axs[0].axhline(y=1, color='k', alpha=0.3)
         axs[0].axhline(y=1e1, color='k', alpha=0.3)
         axs[0].axhline(y=1e2, color='k', alpha=0.3)
@@ -70,12 +78,12 @@ else:
                 axs[j].set_yscale("log")
                 axs[j].set_axisbelow(True)
                 axs[j].grid(True, which='both', axis='y', zorder=-25.0)
-                axs[j].set_xticks([x for x in elements_large[:5]])
-                axs[j].set_xticklabels([str(np.round(x, -3))[:-2] for x in elements_large[:5]])
-                axs[j].set_xlim(3000, 300000)
-                axs[j].set_xlabel("number of elements", fontsize=14)
-                axs[j].legend(["vectorized jacobi", "vectorized jacobi (cupy)"],
-                              loc="upper left", fontsize=10)
+                axs[j].set_xticks([x for x in elements_large[1:7]])
+                axs[j].set_xticklabels([str(np.round(x, -3))[:-2] for x in elements_large[1:7]])
+                axs[j].set_xlim(8300, 250000)
+                # axs[j].set_xlabel("number of elements", fontsize=14)
+                # axs[j].legend(["vectorized jacobi", "vectorized jacobi (cupy)"],
+                #               loc="upper left", fontsize=10)
 
         axs[0].axhline(y=1, color='k', alpha=0.3)
         axs[0].axhline(y=1e1, color='k', alpha=0.3)

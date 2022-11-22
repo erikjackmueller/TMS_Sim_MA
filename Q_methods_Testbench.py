@@ -37,16 +37,16 @@ end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " receprocity")
 start = time.time()
-errors = np.zeros((5, 6))
-memories = np.zeros_like(errors)
-times = np.zeros_like(errors)
-elements = np.zeros(6)
+
+
 if small_samples:
-    errors = np.zeros((5, 6))
+    sample_list_small = [250, 500, 750, 1000, 1250, 1500, 1750, 2000]
+    length = len(sample_list_small)
+    errors = np.zeros((5, length))
     memories = np.zeros_like(errors)
     times = np.zeros_like(errors)
-    elements = np.zeros(6)
-    for i_samples, samples in enumerate([250, 500, 750, 1000, 1500, 2000]):
+    elements = np.zeros(length)
+    for i_samples, samples in enumerate(sample_list_small):
         tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples)
 
         # initialize all methods for JIT reset
@@ -64,7 +64,7 @@ if small_samples:
         n_elements = tc.shape[0]
         print(f"elements: {n_elements}")
         elements[i_samples] = n_elements
-        for method in [3, 4]:
+        for method in [0, 1, 2, 3, 4]:
             time_0 = start
             tracemalloc.start()
             start = time.time()
@@ -125,12 +125,15 @@ if small_samples:
     np.savetxt("Q_benchmark_memory", memories, delimiter=",")
     np.savetxt("Q_benchmark_time", times, delimiter=",")
     np.savetxt("Q_benchmark_elements", elements, delimiter=",")
+    print(f"saved results of elements {elements, memories, times}")
 else:
-    errors = np.zeros((2, 6))
+    sample_list_large = [100, 2000, 5000, 10000, 20000, 25000, 50000, 100000]
+    length = len(sample_list_large)
+    errors = np.zeros((2, length))
     memories = np.zeros_like(errors)
     times = np.zeros_like(errors)
-    elements = np.zeros(6)
-    for i_samples, samples in enumerate([2000, 5000, 10000, 25000, 50000, 100000]):
+    elements = np.zeros(length)
+    for i_samples, samples in enumerate(sample_list_large): #
         tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples)
 
         # initialize all methods for JIT reset
@@ -195,6 +198,7 @@ else:
     np.savetxt("Q_benchmark_large_samples_memory", memories, delimiter=",")
     np.savetxt("Q_benchmark_large_samples_time", times, delimiter=",")
     np.savetxt("Q_benchmark_large_samples_elements", elements, delimiter=",")
+    print(f"saved results of elements {elements}")
 
 
 
