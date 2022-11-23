@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     start = time.time()
     # tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-    # tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
+    tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
     tc, areas, tri_points, n_v, avg_len = sphere_mesh(1000, scaling=scaling_factor)
     end = time.time()
     t = t_format(end - start)

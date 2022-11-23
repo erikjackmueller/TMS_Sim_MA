@@ -7,6 +7,7 @@ from functools import partial
 from mpl_toolkits import mplot3d
 from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
+import matplotlib
 from matplotlib import cm
 import h5py
 import numba
@@ -23,43 +24,42 @@ from numba import cuda
 # import dask.array as da
 
 
-def read_sphere_mesh_from_txt(sizes, path):
-    files = ["con_1_" + str(sizes[0]), "con_2_" + str(sizes[0]), "con_3_" + str(sizes[0]), "x_" + str(sizes[0]),
-             "y_" + str(sizes[0]), "z_" + str(sizes[0])]
+def read_sphere_mesh_from_txt(sizes, path, scaling=1):
+    files_con = ["con_1_" + str(sizes[0]), "con_2_" + str(sizes[0]), "con_3_" + str(sizes[0])]
+    files_loc = ["x_" + str(sizes[0]), "y_" + str(sizes[0]), "z_" + str(sizes[0])]
     connections = np.zeros([3, sizes[1]])
     locations = np.zeros([3, sizes[0]])
-    for i in range(6):
-        if i < 3:
-            connections[i, :] = np.genfromtxt(os.path.join(path, files[i] + ".txt"), dtype=int)
-        else:
-            locations[i - 3, :] = np.genfromtxt(os.path.join(path, files[i] + ".txt"), dtype=float)
-    trangle_centers = np.zeros([len(connections[0, :]), 3])
+
+    for i in range(3):
+        connections[i, :] = np.genfromtxt(os.path.join(path, files_con[i] + ".txt"), dtype=float) - 1
+    for i in range(3):
+        locations[i, :] = np.genfromtxt(os.path.join(path, files_loc[i] + ".txt"), dtype=float)
+    locations = scaling * locations
+    # connections = connections.T
+    triangle_centers = np.zeros([len(connections[0, :]), 3])
+    # plot_mesh(locations, connections, 0, connections.shape[1] - 1, connections)
     areas = np.zeros(len(connections[0, :]))
-
-    # calculate centerpoints of trinagles from connections and vertexes
-    # center is (AB + BC + CA) / 3 starting from A
-    # for a flat trangle in space that should be (x1 + x2 + x3)/3, (y1 + y2 + y3)/3, (z1 + z2 + z3)/3
-    # for the area the formula is S = 1/2|AB x AC|, x is the crossproduct in this case
-
-    # plot_mesh(locations, connections, 0, 500)
-    # ax1 = plt.axes(projection='3d')
-    # plot_triangle(ax1, locations, connections, 4, centers=trangle_centers)
-    # plot_triangle(ax1, locations, connections, 2) # they're only almost the same
-    # plot_triangle(ax1, locations, connections, 12)
-
-    for i in range(len(connections[0, :])):
+    n_v = np.zeros_like(triangle_centers)
+    n = len(connections[0, :])
+    triangle_points = np.zeros((n, 3, 3))
+    edge_lens = np.zeros(n)
+    for i in range(n):
         p1 = locations[:, int(connections[0, i])]
         p2 = locations[:, int(connections[1, i])]
         p3 = locations[:, int(connections[2, i])]
+        triangle_points[i][:][:] = np.vstack((p1, p2, p3))
         p_c_1 = (p1[0] + p2[0] + p3[0]) / 3
         p_c_2 = (p1[1] + p2[1] + p3[1]) / 3
         p_c_3 = (p1[2] + p2[2] + p3[2]) / 3
-        trangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
+        triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
         line1_2 = p2 - p1
         line1_3 = p3 - p1
+        line2_3 = p3 - p2
         areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
-
-    return trangle_centers, areas
+        n_v[i] = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+        edge_lens[i] = 1 / 3 * (np.linalg.norm(line1_2) + np.linalg.norm(line1_3) + np.linalg.norm(line2_3))
+    avg_length = np.mean(edge_lens)
+    return triangle_centers, areas, triangle_points, n_v, avg_length
 
 
 def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
@@ -85,7 +85,9 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
     connections = tri.simplices.copy().T
 
     triangle_centers = np.zeros([len(connections[0, :]), 3])
+    # plot_mesh(locations, connections, 0, connections.shape[1] - 1, connections)
     areas = np.zeros(len(connections[0, :]))
+    n_v = np.zeros_like(triangle_centers)
 
     # calculate centerpoints of trinagles from connections and vertexes
     # center is (AB + BC + CA) / 3 starting from A
@@ -94,6 +96,7 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
 
     n = len(connections[0, :])
     triangle_points = np.zeros((n, 3, 3))
+    edge_lens = np.zeros(n)
     for i in range(n):
         p1 = locations[:, int(connections[0, i])]
         p2 = locations[:, int(connections[1, i])]
@@ -105,20 +108,41 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
         triangle_centers[i, :] = np.array([p_c_1, p_c_2, p_c_3])
         line1_2 = p2 - p1
         line1_3 = p3 - p1
+        line2_3 = p3 - p2
         areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
-    # plot_mesh(locations, connections, 0, 1200, centers=triangle_centers)
-    # ax1 = plt.axes(projection='3d')
-    # plot_triangle(ax1, locations, connections, 4, centers=triangle_centers)
+        n_v[i] = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+        edge_lens[i] = 1 / 3 * (np.linalg.norm(line1_2) + np.linalg.norm(line1_3) + np.linalg.norm(line2_3))
+    avg_length = np.mean(edge_lens)
+    return triangle_centers, areas, triangle_points, n_v, avg_length
 
-    return triangle_centers, areas, triangle_points
+def sphere_mesh(samples=1000, n_angle_steps=20,  scaling=1):
 
-def sphere_mesh(samples=1000, scaling=1):
-
+    # old version
     locations = scaling * fibonacci_sphere_mesh(samples=samples).T
     sphere_surf_locations = carthesian_to_sphere(locations.T)[:, 1:]
+
+    # new version
+    # theta = np.linspace(0, 2 * np.pi, n_angle_steps)
+    # phi = np.linspace(0, np.pi, n_angle_steps)
+    # theta, phi = np.meshgrid(theta, phi)
+    # rho = scaling
+    # x = np.ravel(rho * np.cos(theta) * np.sin(phi))
+    # y = np.ravel(rho * np.sin(theta) * np.sin(phi))
+    # z = np.ravel(rho * np.cos(phi))
+    # locations = np.vstack((x, y, z))[:, n_angle_steps-1:n_angle_steps**2-n_angle_steps + 1]
+    # sphere_surf_locations = carthesian_to_sphere(locations.T)[:, 1:]
+
+
+    # tri = matplotlib.tri.Triangulation(np.ravel(theta), np.ravel(phi))
+    # tri = matplotlib.tri.Triangulation(np.ravel(sphere_surf_locations[:, 0]), np.ravel(sphere_surf_locations[:, 1]))
+    # connections = tri.triangles.copy().T
+
     tri = Delaunay(sphere_surf_locations)
+    # tri = Delaunay(locations.T)
     connections = tri.simplices.copy().T
 
+
+    # plot_mesh(locations, connections, 0, connections.shape[1] - 1, connections.T)
     triangle_centers = np.zeros([len(connections[0, :]), 3])
     areas = np.zeros(len(connections[0, :]))
     n_v = np.zeros_like(triangle_centers)
@@ -140,6 +164,8 @@ def sphere_mesh(samples=1000, scaling=1):
         line1_3 = p3 - p1
         line2_3 = p3 - p2
         areas[i] = 0.5 * vnorm(np.cross(line1_2, line1_3))
+        if areas[i] == 0:
+            a=2
         n_v[i] = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
         edge_lens[i] = 1/3*(np.linalg.norm(line1_2) + np.linalg.norm(line1_3) + np.linalg.norm(line2_3))
     avg_length = np.mean(edge_lens)
@@ -207,20 +233,23 @@ def read_mesh_from_hdf5(fn, mode="source"):
     else:
         raise ValueError("mode can only be 'source', 'target' or 'coil'!")
 
-def plot_mesh(locations, connections, n1, n2, centers=None):
+def plot_mesh(locations, connections, n1, n2, tris, centers=None):
     fig = plt.figure()
     ax = plt.axes(projection='3d')
-    for i in range(n1, n2):
-        c1 = int(connections[0, i])
-        c2 = int(connections[1, i])
-        c3 = int(connections[2, i])
-        xdata = np.array([locations[0, c1], locations[0, c2], locations[0, c3], locations[0, c1]])
-        ydata = np.array([locations[1, c1], locations[1, c2], locations[1, c3], locations[1, c1]])
-        zdata = np.array([locations[2, c1], locations[2, c2], locations[2, c3], locations[2, c1]])
-
-        ax.scatter3D(xdata, ydata, zdata)
-        ax.plot3D(xdata, ydata, zdata)
-    if centers.dtype == 'float64':
+    ax.plot_trisurf(locations[0, :], locations[1, :], locations[2, :], triangles=tris, cmap=cm.jet,
+                    antialiased=True)
+    # for i in range(n1, n2):
+    #     c1 = int(connections[0, i])
+    #     c2 = int(connections[1, i])
+    #     c3 = int(connections[2, i])
+    #     xdata = np.array([locations[0, c1], locations[0, c2], locations[0, c3], locations[0, c1]])
+    #     ydata = np.array([locations[1, c1], locations[1, c2], locations[1, c3], locations[1, c1]])
+    #     zdata = np.array([locations[2, c1], locations[2, c2], locations[2, c3], locations[2, c1]])
+    #
+    #     ax.plot_trisurf(xdata, ydata, zdata, triangles=tris, antialiased=True)
+        # ax.scatter3D(xdata, ydata, zdata)
+        # ax.plot3D(xdata, ydata, zdata)
+    if type(centers) == np.ndarray:
         xc = centers[n1:n2, 0]
         yc = centers[n1:n2, 1]
         zc = centers[n1:n2, 2]
@@ -290,9 +319,9 @@ def reciprocity_three_D(r_sphere, theta, r0_v=np.array([12, 0, 0]), m=np.array([
                     E[i_r, i_theta] = vnorm(E_v)
 
     elif projection == "sphere_surface":
-        E = np.zeros([phi.shape[0], theta.shape[0]])
+        E = np.zeros([phi.shape[0], theta.shape[1]])
         for i_phi in range(phi.shape[0]):
-            for i_theta in range(theta.shape[0]):
+            for i_theta in range(theta.shape[1]):
                 phi_i = phi[i_phi, 0]
                 theta_j = theta[0, i_theta]
                 x, y, z = r_sphere * np.sin(phi_i) * np.cos(theta_j), r_sphere * np.sin(phi_i) * np.sin(theta_j), \
@@ -649,14 +678,16 @@ def plot_E_sphere_surf(res, phi, theta, r, c_map=cm.plasma):
 
 def plot_E_sphere_surf_diff(res1, res2, phi=None, theta=None, r=None, xyz_grid=None, c_map=cm.plasma, normalize=True,
                             names=["analytic", "numeric"], save=False, save_fn=None, plot_difference=True, title=True):
-    diff = np.abs(res2 - res1)
+    diff = np.abs(res2 - res1) / (np.max(res1) - np.min(res1)) * 100
     rerror = nrmse(res2, res1) * 100
     if plot_difference:
         fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(14, 5))
         ax1, ax2, ax3 = ax[0], ax[1], ax[2]
     else:
-        fig, ax = plt.subplots(1, 2, subplot_kw={'projection': '3d'}, figsize=(14, 5))
-        ax1, ax2 = ax[0], ax[1]
+        # fig, ax = plt.subplots(1, 2, subplot_kw={'projection': '3d'}, figsize=(14, 5))
+        # ax1, ax2 = ax[0], ax[1]
+        fig, ax1 = plt.subplots(1, 1, subplot_kw={'projection': '3d'}, figsize=(6, 5))
+
     if xyz_grid is None:
         x = r * np.sin(phi) * np.cos(theta)
         y = r * np.sin(phi) * np.sin(theta)
@@ -675,7 +706,9 @@ def plot_E_sphere_surf_diff(res1, res2, phi=None, theta=None, r=None, xyz_grid=N
         fcolors2 = (fcolors2 - fmin1) / (fmax1 - fmin1)
         fcolorsdiff = diff
         fmax_d, fmin_d = fcolorsdiff.max(), fcolorsdiff.min()
-        fcolorsdiff = (fcolorsdiff - fmin1) / (fmax1 - fmin1)
+        fcolorsdiff = (fcolorsdiff - fmin_d) / (fmax_d - fmin_d)
+        # fcolorsdiff = (1/2)*((fcolorsdiff - fmin_d) / (fmax_d - fmin_d)) + (1/2)
+        # fcolorsdiff[50, -1] = 0 #get one 0 in for all other values are > 0 and I needed 0,+1 values
         min_val1, min_val2, min_vald = 0, 0, 0
         max_val1, max_val2, max_vald = 1, 1, 1
     else:
@@ -689,12 +722,15 @@ def plot_E_sphere_surf_diff(res1, res2, phi=None, theta=None, r=None, xyz_grid=N
         min_vald = diff.min()
         max_vald = diff.max()
 
-    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors1))
-    ax2.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
+    # ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
+    ax1.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolors2))
+
+    ax1.set_axis_off()
+    # ax2.set_axis_off()
 
     if title:
         ax1.set_title(names[0])
-        ax2.set_title(names[1])
+        # ax2.set_title(names[1])
 
     if plot_difference:
         ax3.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=c_map(fcolorsdiff))
@@ -704,6 +740,12 @@ def plot_E_sphere_surf_diff(res1, res2, phi=None, theta=None, r=None, xyz_grid=N
     # ax.grid()
     m = cm.ScalarMappable(cmap=c_map)
     cbar = fig.colorbar(m, shrink=0.5, pad=0.15)
+    # cbar_labels = fmax_d * np.arange(0, 1.2, 0.2)
+    # cbar.ax.set_yticklabels([str(np.round(x, 2)) for x in cbar_labels])
+    ax1.set_box_aspect([1, 1, 0.85])
+    # ax2.set_box_aspect([1, 1, 0.85])
+    plt.tight_layout
+
     # cbar.set_label("normalized difference", rotation=270)
     # rerror = np.linalg.norm(diff) * 100 / np.linalg.norm(res1)
     if plot_difference:
@@ -828,7 +870,41 @@ def SCSM_tri_sphere(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=
 
 
 @numba.jit(nopython=True, parallel=True)
-def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33, omega=1):
+def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
+                          omega=1):
+    rs = tri_centers
+    M = rs.shape[0]
+    A = np.zeros((M, M), dtype=np.complex_)
+    B = np.zeros(M, dtype=np.complex_)
+    eps0 = 8.854187812813e-12
+
+    def vnorm(x):
+        return np.linalg.norm(x)
+
+    def kroen(i, j):
+        return int(i == j)
+
+    for i in numba.prange(M):
+        r_norm_i = rs[i] / vnorm(rs[i])
+        p1 = tri_points[i][0]
+        p2 = tri_points[i][1]
+        p3 = tri_points[i][2]
+        n = - np.cross((p3 - p1), (p2 - p3)) / (2 * areas[i])
+        for j in numba.prange(M):
+            A11 = np.dot((rs[i, :] - rs[j, :]), n)
+            A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
+            A1 = A11 / A12
+            A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2))
+            A[i, j] = A1 - A2
+        B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
+    # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
+    Q = np.linalg.solve(A, B)
+
+    return Q, rs
+
+@numba.jit(nopython=True, parallel=True)
+def SCSM_tri_sphere_numba_complex(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
+                          omega=1):
     rs = tri_centers
     M = rs.shape[0]
     A = np.zeros((M, M), dtype=np.complex_)
@@ -966,26 +1042,39 @@ def SCSM_jacobi_iter_numpy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0
     return x
 
 def SCSM_jacobi_iter_vec_numpy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0, omega=3e3, n_iter=1000, tol=1e-15,
-                          high_precision=False, verbose=False):
+                               complex_values=False, fmm_option=False, verbose=False):
     rs = tri_centers
     M = rs.shape[0]
     eps0 = 8.854187812813e-12
-
-    a_ii = - ( ((1/2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out)) ) * (1 / eps0 / areas)
+    if complex_values == True:
+        a_ii = - ( ((1/2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out)) ) * (1 / eps0 / areas)
+    else:
+        a_ii = - ((1 / 2) * (sig_in + sig_out) / (sig_in - sig_out)) * (1 / eps0 / areas)
 
     x = (1j * b_im) / a_ii
     f = 4 * np.pi * eps0
+    # fmm_res_phi = fmm.lfmm3d(eps=1e-12, sources=rs.T, charges=np.ones(M), pg=2)
+    # grad_phi = - 1 / (4 * np.pi * eps0) * fmm_res_phi.grad.T
     for i_iter in numba.prange(n_iter):
         x_new = np.zeros_like(x)
         for i in numba.prange(M):
-            delta_r = rs[i] - rs
-            A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
-            A12 = f * v_vnorm(delta_r) ** 3
-            a_i = A11 / (A12 + 1e-20)
-            b_i = 1j * b_im[i]
-            s1 = np.dot(a_i[:i], x[:i])
-            s2 = np.dot(a_i[i + 1:], x[i + 1:])
-            x_new[i] = (b_i - s1 - s2) / a_ii[i]
+            if fmm_option:
+                fmm_res_phi = fmm.lfmm3d(eps=1e-12, sources=rs[i].T, charges=np.ones(1), pg=2, pgt=2, targets=rs.T)
+                grad_phi = 1 / (4 * np.pi * eps0) * fmm_res_phi.gradtarg.T
+                a_i = (grad_phi[:, 0] * n[i, 0]) + (grad_phi[:, 1] * n[i, 1]) + (grad_phi[:, 2] * n[i, 1]) #+ (1 / 2 / eps0 / areas)
+                b_i = 1j * b_im[i]
+                s1 = np.dot(a_i[:i], x[:i])
+                s2 = np.dot(a_i[i + 1:], x[i + 1:])
+                x_new[i] = (b_i - s1 - s2) / a_ii[i]
+            else:
+                delta_r = rs[i] - rs
+                A11 = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1])
+                A12 = f * v_vnorm(delta_r) ** 3
+                a_i = A11 / (A12 + 1e-20)
+                b_i = 1j * b_im[i]
+                s1 = np.dot(a_i[:i], x[:i])
+                s2 = np.dot(a_i[i + 1:], x[i + 1:])
+                x_new[i] = (b_i - s1 - s2) / a_ii[i]
 
         if vnorm(x - x_new) < tol:
             if verbose:
@@ -1002,8 +1091,28 @@ def SCSM_jacobi_iter_vec_numpy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out
         x = x_new
     return x
 
+def q_jac_vec(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0, omega=3e3, n_iter=1000, tol=1e-15):
+    rs = tri_centers
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+    a_ii = - ((1 / 2) * (sig_in + sig_out) / (sig_in - sig_out)) * (1 / eps0 / areas)
+    # a_ii = - (((1 / 2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out))) * (
+    #             1 / eps0 / areas)
+    x = (1j * b_im) / a_ii
+    for i_iter in numba.prange(n_iter):
+        x_new = np.zeros_like(x)
+        for i in numba.prange(M):
+                delta_r = rs[i] - rs
+                a_i = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1]) /\
+                      (4 * np.pi * eps0 * v_vnorm(delta_r) ** 3 + 1e-20)
+                x_new[i] = (1j * b_im[i] - np.dot(a_i[:i], x[:i]) - np.dot(a_i[i + 1:], x[i + 1:])) / a_ii[i]
+        if vnorm(x - x_new) < tol:
+            break
+        x = x_new
+    return x
+
 def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0, omega=3e3, n_iter=1000, tol=1e-15,
-                          high_precision=False, verbose=False):
+                          high_precision=False, complex_values=False, verbose=False):
 
     if high_precision:
         rs = cp.asarray(tri_centers, dtype='float64')
@@ -1029,8 +1138,11 @@ def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0,
     def v_vnorm(x):
         x = x.T
         return cp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2).T
-
-    a_ii = - ( ((1/2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out)) ) * (1 / eps0 / areas)
+    if complex_values:
+        a_ii = - ( ((1/2) * (sig_in + sig_out) / (sig_in - sig_out)) + ((1j * omega * eps0) / (sig_in - sig_out)) ) * (1 / eps0 / areas)
+    else:
+        a_ii = - ((1 / 2) * (sig_in + sig_out) / (sig_in - sig_out)) * (
+                    1 / eps0 / areas)
     # a_ii = - ((1 / 2) + ((1j * omega * eps0) / 0.33)) * (1 / eps0 / areas)
     # if high_precision:
     #     x = cp.zeros(M, dtype='complex128')
@@ -1065,6 +1177,46 @@ def SCSM_jacobi_iter_cupy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0,
         x = x_new
     x_numpy = x.get()
     return x_numpy
+
+def q_jac_cu(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0, n_iter=1000, tol=1e-15, high_precision=False):
+
+    if high_precision:
+        rs = cp.asarray(tri_centers, dtype='float64')
+        areas = cp.asarray(areas, dtype='float64')
+        n = cp.asarray(n, dtype='float64')
+        b_im = cp.asarray(b_im, dtype='float64')
+        sig_out = cp.asarray(sig_out, dtype='float64')
+        sig_in = cp.asarray(sig_in, dtype='float64')
+    else:
+        rs = cp.asarray(tri_centers, dtype='float32')
+        areas = cp.asarray(areas, dtype='float32')
+        n = cp.asarray(n, dtype='float32')
+        b_im = cp.asarray(b_im, dtype='float32')
+        sig_out = cp.asarray(sig_out, dtype='float32')
+        sig_in = cp.asarray(sig_in, dtype='float32')
+
+    M = rs.shape[0]
+    eps0 = 8.854187812813e-12
+
+    def v_vnorm(x):
+        x = x.T
+        return cp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2).T
+
+    a_ii = - ((1/2) * (sig_in + sig_out) / (sig_in - sig_out)) * (1 / eps0 / areas)
+    x = (1j * b_im) / a_ii
+    f = 4 * cp.pi * eps0
+    for i_iter in numba.prange(n_iter):
+        x_new = cp.zeros_like(x)
+        for i in numba.prange(M):
+            delta_r = rs[i] - rs
+            a_i = (delta_r[:, 0] * n[i, 0]) + (delta_r[:, 1] * n[i, 1]) + (delta_r[:, 2] * n[i, 1]) / \
+                  (4 * cp.pi * eps0 * v_vnorm(delta_r) ** 3 + 1e-20)
+            x_new[i] = (1j * b_im[i] - cp.dot(a_i[:i], x[:i]) - cp.dot(a_i[i + 1:], x[i + 1:])) / a_ii[i]
+
+        if cp.linalg.norm(x - x_new) < tol:
+           break
+        x = x_new
+    return x.get()
 
 def SCSM_jacobi_iter_cupy_old(tri_centers, areas, n, b_im, sig=0.33, omega=1, n_iter=1000, tol=1e-15, verbose=False):
 
@@ -1561,7 +1713,6 @@ def SCSM_FMM_E(Q, r_source, r_target, eps, m=np.array([0, 1, 0]), r0=np.array([0
 def SCSM_FMM_E2(Q, r_source, r_target, eps, b_im):
     eps0 = 8.854187812813e-12
     n = r_target.shape[0]
-    E = np.zeros(n)
     charges = Q.imag
     fmm_res_phi = fmm.lfmm3d(eps=eps, sources=r_source.T, charges=charges, pg=2, pgt=2, targets=r_target.T)
     grad_phi = -1/(4 * np.pi * eps0) * fmm_res_phi.gradtarg.T
@@ -2231,6 +2382,7 @@ def array_3d_plot(array, array1=0):
         ys1 = array1[:, 1]
         zs1 = array1[:, 2]
         ax.scatter3D(xs1, ys1, zs1)
+        ax.set_box_aspect([1, 1, 1])
     plt.show()
 
 def translate(array, transformation_matrix):
@@ -2369,3 +2521,40 @@ def One_layer_sphere_single_m_test(n, r_out, r_in, m, direction, omega, n_sample
 def plot_curve(x, y):
     plt.plot(x, y)
     plt.show()
+
+def set_axes_equal(ax):
+    '''Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc..  This is one possible solution to Matplotlib's
+    ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
+
+    Input
+      ax: a matplotlib axis, e.g., as output from plt.gca().
+    '''
+
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+def sphere_mgrid(samples, r_in):
+    r_test = sphere_mesh(samples, scaling=r_in)[0]
+    sphere_coords = carthesian_to_sphere(r_test).T
+    r_, phi_, theta_ = np.sort(sphere_coords[0]), np.sort(sphere_coords[1]), np.sort(sphere_coords[2])
+    n = r_.shape[0]
+    phi_2, theta_2 = np.meshgrid(phi_, theta_)
+    phi3, theta3 = phi_2.T, theta_2.T
+    return xyz_grid(r, phi3, theta3), n

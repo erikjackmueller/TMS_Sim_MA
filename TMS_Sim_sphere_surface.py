@@ -6,23 +6,33 @@ matplotlib.use("TkAgg")
 from pathlib import Path
 from matplotlib import cm
 
-n = 100
+# path = os.path.realpath(Path("C:/Users/ermu8317/Downloads/Sphere_10242"))
+path = "Sphere_10242"
+sizes = [10242, 20480]
+# path = "Sphere_2964"
+# sizes = [2964, 5924]
+# path = "Sphere_642"
+# sizes = [642, 1280]
+#
+n = 101
 phi1 = np.linspace(0, np.pi, n)
 theta1 = np.linspace(0, 2 * np.pi, n)
 phi2, theta2 = np.meshgrid(phi1, theta1)
 phi, theta = phi2.T, theta2.T
 scaling_factor = 1
 r = 0.9
-xyz_grid = xyz_grid(r, phi, theta)
-
 direction = np.array([0, 0, 1])
 d_norm = direction/np.linalg.norm(direction)
 r0 = 1.05 * d_norm
 # m, m_pos, transformation_matrix, sigmas = read_mesh_from_hdf5(fn2, mode="coil")
 # m = d_norm
 m = np.array([0, 0, 1])
-omega = 3e3
-# omega = 18.85956e3
+# omega = 3e3
+omega = 18.85956e3
+
+xyz_grid = xyz_grid(r, phi, theta)
+# xyz_grid, n = sphere_mgrid(70, r)
+
 # omega = 100
 r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 # r_target = r_target[np.where(r_target[:, 2] > (0.8*r))]
@@ -30,15 +40,17 @@ r_target = sphere_to_carthesian(r=r, phi=phi.flatten(), theta=theta.flatten())
 start = time.time()
 time_0 = start
 # calculate analytic solution
-res1 = reciprocity_sphere(grid=xyz_grid, r0_v=r0, m=m, omega=omega)[1]
+res1 = reciprocity_three_D(r, theta, r0_v=r0, m=m, phi=phi, omega=omega, projection='sphere_surface')
+# res1 = reciprocity_sphere(n=n, grid=xyz_grid, r0_v=r0, m=m, omega=omega)[1]
 end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " receprocity")
 
 start = time.time()
-# tc, areas = functions.read_sphere_mesh_from_txt(sizes, path)
-# tc, areas, tri_points = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=scaling_factor)
-tc, areas, tri_points, n_v, avg_len = sphere_mesh(10000, scaling=scaling_factor)
+# tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt(sizes, path)
+# tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1)
+# tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1)
+tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples=10000, scaling=scaling_factor)
 print(f"average length: {avg_len}")
 end = time.time()
 t = t_format(end - start)
@@ -48,8 +60,11 @@ print(f"elements: {n_elements}")
 
 start = time.time()
 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
-# Q = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+# Q = q_jac_cu(tc, areas, n_v, b_im, tol=1e-19, n_iter=20)
+# Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega, complex_values=True, verbose=True)
+Q = q_jac_vec(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
+# Q = SCSM_jacobi_iter_vec_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega, complex_values=False, verbose=True)
+# Q = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega, verbose=True)
 # Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=omega)
 # Q = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
 
@@ -103,7 +118,7 @@ print(f"relative error: {error_imag:.7f}%")
 # print(f"relative error with near field: {rerror_imag2:.7f}%")
 
 # plot_E_sphere_surf(res, phi, theta, r)
-plot_E_sphere_surf_diff(res1, res2, xyz_grid=xyz_grid, c_map=cm.jet)
+plot_E_sphere_surf_diff(res1, res2, xyz_grid=xyz_grid, c_map=cm.bwr, title=False, plot_difference=False)
 # functions.plot_E_sphere_surf(res2, phi, theta, r)
 # functions.plot_E_sphere_surf(diff, phi, theta, r)
 # functions.plot_E_sphere_surf(relative_diff, phi, theta, r)
