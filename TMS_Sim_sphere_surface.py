@@ -46,6 +46,7 @@ end = time.time()
 t = t_format(end - start)
 print(f"{t[0]:.2f}" + t[1] + " receprocity")
 
+
 start = time.time()
 # tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt(sizes, path)
 # tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1)
