@@ -40,23 +40,24 @@ start = time.time()
 
 
 if small_samples:
-    sample_list_small = [250, 500, 750, 1000, 1250, 1500, 1750, 2000]
+    sample_list_small = [2000, 2500, 3000, 3500, 4000]
     length = len(sample_list_small)
     errors = np.zeros((5, length))
     memories = np.zeros_like(errors)
     times = np.zeros_like(errors)
     elements = np.zeros(length)
     for i_samples, samples in enumerate(sample_list_small):
-        tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples)
+        #tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples)
+        tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt(sizes=None, path="spheres/", n=samples)
 
         # initialize all methods for JIT reset
         if i_samples == 0:
             Q0 = SCSM_tri_sphere(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
             Q1 = SCSM_tri_sphere_numba(tc, tri_points, areas, r0=r0, m=m, omega=omega)[0]
             b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-            Q2 = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
-            Q3 = SCSM_jacobi_iter_vec_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
-            Q4 = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+            Q2 = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
+            Q3 = q_jac_vec(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
+            Q4 = q_jac_cu(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
         print(f"average length: {avg_len:.5f}")
         end = time.time()
         t = t_format(end - start)
@@ -78,15 +79,15 @@ if small_samples:
                 print(f"numba, number of samples: {samples}")
             elif method == 2:
                 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-                Q = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+                Q = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
                 print(f"jacobi, number of samples: {samples}")
             elif method == 3:
                 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-                Q = SCSM_jacobi_iter_vec_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+                Q = q_jac_vec(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
                 print(f"vec-jacobi, number of samples: {samples}")
             elif method == 4:
                 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-                Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+                Q = q_jac_cu(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
                 print(f"cupy-jacobi, number of samples: {samples}")
             # Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=omega)
             mem = tracemalloc.get_traced_memory()[1] / (1024**2)
@@ -127,20 +128,20 @@ if small_samples:
     np.savetxt("Q_benchmark_elements", elements, delimiter=",")
     print(f"saved results of elements {elements, memories, times}")
 else:
-    sample_list_large = [100, 2000, 5000, 10000, 20000, 25000, 50000, 100000]
+    sample_list_large = [10000, 20000, 40000, 100000, 200000]
     length = len(sample_list_large)
     errors = np.zeros((2, length))
     memories = np.zeros_like(errors)
     times = np.zeros_like(errors)
     elements = np.zeros(length)
     for i_samples, samples in enumerate(sample_list_large): #
-        tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples)
-
+        # tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples)
+        tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt(sizes=None, path="spheres/", n=samples)
         # initialize all methods for JIT reset
         if i_samples == 0:
             b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-            Q3 = SCSM_jacobi_iter_vec_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
-            Q4 = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+            Q3 = q_jac_vec(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
+            Q4 = q_jac_cu(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
         print(f"average length: {avg_len:.5f}")
         end = time.time()
         t = t_format(end - start)
@@ -156,11 +157,11 @@ else:
 
             if method == 0:
                 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-                Q = SCSM_jacobi_iter_vec_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+                Q = q_jac_vec(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
                 print(f"vec-jacobi, number of samples: {samples}")
             elif method == 1:
                 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
-                Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega)
+                Q = q_jac_cu(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
                 print(f"cupy-jacobi, number of samples: {samples}")
             # Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=omega)
             mem = tracemalloc.get_traced_memory()[1] / (1024 ** 2)

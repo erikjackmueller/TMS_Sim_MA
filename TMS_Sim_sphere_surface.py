@@ -7,10 +7,10 @@ from pathlib import Path
 from matplotlib import cm
 
 # path = os.path.realpath(Path("C:/Users/ermu8317/Downloads/Sphere_10242"))
-path = "Sphere_10242"
-sizes = [10242, 20480]
-# path = "Sphere_2964"
-# sizes = [2964, 5924]
+# path = "Sphere_10242"
+# sizes = [10242, 20480]
+path = "Sphere_2964"
+sizes = [2964, 5924]
 # path = "Sphere_642"
 # sizes = [642, 1280]
 #
@@ -48,10 +48,11 @@ print(f"{t[0]:.2f}" + t[1] + " receprocity")
 
 
 start = time.time()
+tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt(sizes=None, path="spheres/", n=400)
 # tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt(sizes, path)
 # tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1)
 # tc, areas, tri_points, n_v, avg_len = read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1)
-tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples=10000, scaling=scaling_factor)
+# tc, areas, tri_points, n_v, avg_len = sphere_mesh(samples=10000, scaling=scaling_factor)
 print(f"average length: {avg_len}")
 end = time.time()
 t = t_format(end - start)
@@ -62,8 +63,8 @@ print(f"elements: {n_elements}")
 start = time.time()
 b_im = jacobi_vectors_numpy(tc, n_v, r0, m, omega=omega)
 # Q = q_jac_cu(tc, areas, n_v, b_im, tol=1e-19, n_iter=20)
-# Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega, complex_values=True, verbose=True)
-Q = q_jac_vec(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
+Q = SCSM_jacobi_iter_cupy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega, complex_values=True, verbose=True)
+# Q = q_jac_vec(tc, areas, n_v, b_im, tol=5e-16, n_iter=20)
 # Q = SCSM_jacobi_iter_vec_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega, complex_values=False, verbose=True)
 # Q = SCSM_jacobi_iter_numpy(tc, areas, n_v, b_im, tol=5e-16, n_iter=20, omega=omega, verbose=True)
 # Q = SCSM_matrix(tc, areas, n=n_v, b_im=b_im, omega=omega)

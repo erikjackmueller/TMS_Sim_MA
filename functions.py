@@ -19,25 +19,34 @@ import multiprocessing.managers
 import fmm3dpy as fmm
 import cupy as cp
 from numba import cuda
+import scipy.io
+
 # import cupyx
 # from mpmath import fp
 # import dask.array as da
 
 
-def read_sphere_mesh_from_txt(sizes, path, scaling=1):
-    files_con = ["con_1_" + str(sizes[0]), "con_2_" + str(sizes[0]), "con_3_" + str(sizes[0])]
-    files_loc = ["x_" + str(sizes[0]), "y_" + str(sizes[0]), "z_" + str(sizes[0])]
-    connections = np.zeros([3, sizes[1]])
-    locations = np.zeros([3, sizes[0]])
+def read_sphere_mesh_from_txt(sizes, path, scaling=1, n=2000):
+    if sizes == None:
+        mat_e = scipy.io.loadmat(path + 'elements_' + str(n) + '.mat')
+        locations = mat_e["p"].T
+        mat_c = scipy.io.loadmat(path + 'connections_' + str(n) + '.mat')
+        connections = mat_c["t"].T - 1
+    else:
 
-    for i in range(3):
-        connections[i, :] = np.genfromtxt(os.path.join(path, files_con[i] + ".txt"), dtype=float) - 1
-    for i in range(3):
-        locations[i, :] = np.genfromtxt(os.path.join(path, files_loc[i] + ".txt"), dtype=float)
+        files_con = ["con_1_" + str(sizes[0]), "con_2_" + str(sizes[0]), "con_3_" + str(sizes[0])]
+        files_loc = ["x_" + str(sizes[0]), "y_" + str(sizes[0]), "z_" + str(sizes[0])]
+        connections = np.zeros([3, sizes[1]])
+        locations = np.zeros([3, sizes[0]])
+
+        for i in range(3):
+            connections[i, :] = np.genfromtxt(os.path.join(path, files_con[i] + ".txt"), dtype=float) - 1
+        for i in range(3):
+            locations[i, :] = np.genfromtxt(os.path.join(path, files_loc[i] + ".txt"), dtype=float)
     locations = scaling * locations
     # connections = connections.T
     triangle_centers = np.zeros([len(connections[0, :]), 3])
-    # plot_mesh(locations, connections, 0, connections.shape[1] - 1, connections)
+    # plot_mesh(locations, connections, 0, connections.shape[1] - 1, connections.T)
     areas = np.zeros(len(connections[0, :]))
     n_v = np.zeros_like(triangle_centers)
     n = len(connections[0, :])
@@ -85,7 +94,7 @@ def read_sphere_mesh_from_txt_locations_only(sizes, path, scaling=1):
     connections = tri.simplices.copy().T
 
     triangle_centers = np.zeros([len(connections[0, :]), 3])
-    # plot_mesh(locations, connections, 0, connections.shape[1] - 1, connections)
+    # plot_mesh(locations, connections, 0, connections.shape[1] - 1, connections.T)
     areas = np.zeros(len(connections[0, :]))
     n_v = np.zeros_like(triangle_centers)
 
@@ -862,14 +871,14 @@ def SCSM_tri_sphere(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=
             A11 = np.dot((rs[i, :] - rs[j, :]), n)
             A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
             A1 = A11 / A12
-            A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig))
+            A2 = kroen(i, j) / (eps0 * areas[i]) * (1/2)
             A[i, j] = A1 - A2
         B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
     Q = np.linalg.solve(A, B)
     return Q, rs
 
 
-@numba.jit(nopython=True, parallel=True)
+@numba.jit(nopython=True, parallel=True, fastmath=True)
 def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1]), m=np.array([0, 1, 0]), sig=0.33,
                           omega=1):
     rs = tri_centers
@@ -894,7 +903,7 @@ def SCSM_tri_sphere_numba(tri_centers, tri_points, areas, r0=np.array([0, 0, 1.1
             A11 = np.dot((rs[i, :] - rs[j, :]), n)
             A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
             A1 = A11 / A12
-            A2 = kroen(i, j) / (eps0 * areas[i]) * ((1 / 2))
+            A2 = kroen(i, j) / (eps0 * areas[i]) * (1 / 2)
             A[i, j] = A1 - A2
         B[i] = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs[i] - r0)), n) / (vnorm(rs[i] - r0) ** 3)
     # B = 1j * omega * 1e-7 * np.dot(np.cross(m, (rs - r0)), (rs / vnorm(rs))) / (vnorm(rs - r0) ** 3)
@@ -1021,7 +1030,7 @@ def SCSM_jacobi_iter_numpy(tri_centers, areas, n, b_im, sig_in=0.33, sig_out=0.0
                 A12 = (4 * np.pi * eps0 * vnorm(rs[i, :] - rs[j, :]) ** 3 + kroen(i, j))
                 A1 = A11 / A12
                 a_i[j] = A1
-            a_ii = -1 / (eps0 * areas[i]) * ((1 / 2) + ((1j * omega * eps0) / sig_in))
+            a_ii = -1 / (eps0 * areas[i]) * (1 / 2)
             b_i = 1j * b_im[i]
             s1 = np.dot(a_i[:i], x[:i])
             s2 = np.dot(a_i[i + 1:], x[i + 1:])
